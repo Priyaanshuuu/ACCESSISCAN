@@ -2,11 +2,10 @@
 
 > Automated accessibility, performance, and SEO scanning for vibe coders and small businesses.
 
-[![CI](https://github.com/accessiscan/accessiscan/actions/workflows/ci.yml/badge.svg)](https://github.com/accessiscan/accessiscan/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue)](https://www.typescriptlang.org/)
 
-AccessiScan scans any deployed website with a headless browser, finds accessibility, performance, and SEO issues, and tells you exactly how to fix them — in plain English.
+AccessiScan is planned as a service that scans deployed websites with a headless browser, finds accessibility, performance, and SEO issues, and explains how to fix them in plain English.
+
+> **Project status:** This repository currently contains the initial Next.js web shell. The scanner, worker, database, queue, authentication, and integrations described below are planned architecture, not implemented features.
 
 ---
 
@@ -43,13 +42,12 @@ AccessiScan scans any deployed website with a headless browser, finds accessibil
 
 ---
 
-## Quick Start
+## Quick Start (Current Repository)
 
 ### Prerequisites
 
 - Node.js 20+
-- pnpm 9+
-- Docker (for local Postgres + Redis)
+- npm, pnpm, or another Node.js package manager
 
 ### Setup
 
@@ -58,32 +56,16 @@ AccessiScan scans any deployed website with a headless browser, finds accessibil
 git clone https://github.com/accessiscan/accessiscan.git
 cd accessiscan
 
-# Install
-pnpm install
+# Install dependencies
+npm install
 
-# Start local DB + Redis
-docker-compose up -d
-
-# Copy env
-cp .env.example .env
-# Fill in: DATABASE_URL, REDIS_URL, CLERK keys, etc.
-
-# Setup database
-pnpm db:push
-
-# Run everything
-pnpm dev
+# Start the Next.js development server
+npm run dev
 ```
 
-- **Web app:** http://localhost:3000
-- **Worker:** http://localhost:3001 (Bull Board at /admin/queues)
-- **Action:** `apps/action`
+The current app is available at http://localhost:3000.
 
-### Run a scan
-
-```bash
-pnpm scan https://example.com
-```
+Scanning is not implemented in the current repository yet.
 
 ---
 
@@ -95,7 +77,7 @@ Client → Web App → Queue → Worker → Browser → Scan → Store → Notif
 
 | Component | Tech | Host |
 |---|---|---|
-| Web App | Next.js 14 | Vercel |
+| Web App | Next.js 16 + React 19 | Vercel |
 | Worker | Node.js + Playwright | Railway |
 | Queue | Redis + BullMQ | Upstash |
 | Database | PostgreSQL + Prisma | Neon |
@@ -111,8 +93,8 @@ See [`docs/04-architecture.md`](./docs/04-architecture.md) for the full picture.
 **Language:** TypeScript everywhere — frontend, backend, worker, action.
 
 **Core:**
-- Next.js 14, React 18, Tailwind CSS, shadcn/ui
-- Node.js, Fastify, BullMQ
+- Next.js 16, React 19, Tailwind CSS, shadcn/ui
+- Node.js worker, BullMQ
 - PostgreSQL, Prisma
 - Playwright, axe-core, Lighthouse
 - Clerk (auth), Resend (email), Stripe (payments)
@@ -121,7 +103,7 @@ See [`docs/02-stack.md`](./docs/02-stack.md) for the full stack.
 
 ---
 
-## Project Structure
+## Planned Project Structure
 
 ```
 accessiscan/
@@ -154,9 +136,9 @@ accessiscan/
 
 ---
 
-## GitHub Action
+## Planned GitHub Action
 
-Add to `.github/workflows/accessiscan.yml`:
+When the action is implemented, users will be able to add the following workflow:
 
 ```yaml
 name: AccessiScan
@@ -193,18 +175,18 @@ jobs:
 
 ---
 
-## Development
+## Development (Current Repository)
 
 ```bash
-pnpm dev          # Run all apps in dev mode
-pnpm build        # Build all packages
-pnpm test         # Run all tests
-pnpm lint         # Lint all packages
-pnpm typecheck    # Type-check all packages
-pnpm db:studio    # Open Prisma Studio
+npm run dev        # Start the Next.js development server
+npm run build      # Build the Next.js app
+npm run start      # Start the production server
+npm run lint       # Run ESLint
 ```
 
-### Adding a new scan rule
+The scanner-specific commands below are planned and will become available after the monorepo packages are added.
+
+### Planned scan rule workflow
 
 1. Add rule to `packages/scanner/src/custom-rules.ts`
 2. Add fix template to `packages/fixes/src/templates.ts`
@@ -223,13 +205,14 @@ Contributions welcome. Please:
 4. Push and open a PR
 5. Ensure CI passes
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for details.
+Contribution guidance will be added when the implementation packages are introduced.
 
 ---
 
 ## Roadmap
 
-- [x] MVP — manual scan + dashboard
+- [x] Initial Next.js web shell
+- [ ] MVP — manual scan + dashboard
 - [ ] GitHub Action on Marketplace
 - [ ] Paid tiers (Stripe + Razorpay)
 - [ ] Scheduled scans + email reports
@@ -240,7 +223,7 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for details.
 - [ ] AI-powered fix suggestions
 - [ ] Multi-region deployment
 
-See [`docs/06-roadmap.md`](./docs/06-roadmap.md) for details.
+See [docs/06-roadmap.md](./docs/06-roadmap.md) for details.
 
 ---
 
