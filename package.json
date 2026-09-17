@@ -9,11 +9,16 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "axe-core": "^4.13.0",
+    "bullmq": "^6.3.6",
+    "lighthouse": "^13.4.1",
     "next": "16.3.5",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "shadcn": "^4.21.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
