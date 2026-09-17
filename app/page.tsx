@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 function isValidWebsiteUrl(value: string) {
   try {
@@ -16,13 +19,15 @@ export default function Home() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedUrl, setSubmittedUrl] = useState("");
+  const [scanId, setScanId] = useState("");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const trimmedUrl = url.trim();
     if (!isValidWebsiteUrl(trimmedUrl)) {
       setSubmittedUrl("");
+      setScanId("");
       setError("Enter a valid website URL, including http:// or https://.");
       return;
     }
@@ -30,11 +35,35 @@ export default function Home() {
     setError("");
     setIsSubmitting(true);
     setSubmittedUrl("");
+    setScanId("");
 
-    window.setTimeout(() => {
+    try {
+      const response = await fetch("/api/scans", {
+        body: JSON.stringify({ url: trimmedUrl }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        scanId?: string;
+        url?: string;
+      };
+
+      if (!response.ok || !data.scanId || !data.url) {
+        throw new Error(data.error || "Unable to create the scan.");
+      }
+
+      setSubmittedUrl(data.url);
+      setScanId(data.scanId);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Unable to create the scan. Please try again.",
+      );
+    } finally {
       setIsSubmitting(false);
-      setSubmittedUrl(trimmedUrl);
-    }, 700);
+    }
   }
 
   return (
@@ -63,7 +92,7 @@ export default function Home() {
                 Website URL
               </label>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <input
+                <Input
                   aria-describedby={error ? "url-error" : "url-hint"}
                   aria-invalid={Boolean(error)}
                   className="h-14 min-w-0 flex-1 rounded-xl border border-[#cbd7c9] bg-white px-4 text-base text-[#19382d] shadow-[0_8px_24px_rgba(25,56,45,0.05)] outline-none transition placeholder:text-[#9aa79d] focus:border-[#78942f] focus:ring-4 focus:ring-[#d8f36a]/40"
@@ -76,21 +105,31 @@ export default function Home() {
                   type="url"
                   value={url}
                 />
-                <button
+                <Button
                   className="h-14 rounded-xl bg-[#19382d] px-6 font-semibold text-white transition hover:bg-[#285342] focus:outline-none focus:ring-4 focus:ring-[#d8f36a]/60 disabled:cursor-wait disabled:opacity-70"
                   disabled={isSubmitting}
                   type="submit"
                 >
                   {isSubmitting ? "Preparing..." : "Scan website"}
-                </button>
+                </Button>
               </div>
-              <p className="mt-3 text-sm text-[#7b887e]" id={error ? "url-error" : "url-hint"} role={error ? "alert" : undefined}>
-                {error || "Start with any public website. No account needed for the first scan."}
-              </p>
+              {error ? (
+                <Alert className="mt-3 border-[#e7b9b0] bg-[#fff1ee] text-[#8b3023]" id="url-error" variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : (
+                <p className="mt-3 text-sm text-[#7b887e]" id="url-hint">
+                  Start with any public website. No account needed for the first scan.
+                </p>
+              )}
               {submittedUrl && (
-                <div className="mt-5 rounded-xl border border-[#c8df93] bg-[#eff8d7] px-4 py-3 text-sm text-[#38531f]" role="status">
-                  <span className="font-semibold">Ready to scan:</span> {submittedUrl}
-                </div>
+                <Alert className="mt-5 border-[#c8df93] bg-[#eff8d7] text-[#38531f]" role="status">
+                  <AlertTitle>Queued</AlertTitle>
+                  <AlertDescription className="text-[#58713b]">
+                    {submittedUrl}
+                    <span className="mt-1 block text-xs">Scan ID: {scanId}</span>
+                  </AlertDescription>
+                </Alert>
               )}
             </form>
           </div>
