@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
+import { prisma } from "@/lib/prisma";
+
 function isValidWebsiteUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.trim().length === 0) {
     return false;
@@ -43,12 +45,26 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json(
-    {
-      scanId: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
-      status: "queued",
-      url: url.trim(),
-    },
-    { status: 201 },
-  );
+  try {
+    const scan = await prisma.scan.create({
+      data: {
+        id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+        url: url.trim(),
+      },
+    });
+
+    return NextResponse.json(
+      {
+        scanId: scan.id,
+        status: scan.status.toLowerCase(),
+        url: scan.url,
+      },
+      { status: 201 },
+    );
+  } catch {
+    return NextResponse.json(
+      { error: "Unable to create the scan right now." },
+      { status: 503 },
+    );
+  }
 }
