@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,6 +129,9 @@ export default function Home() {
                   <AlertDescription className="text-[#58713b]">
                     {submittedUrl}
                     <span className="mt-1 block text-xs">Scan ID: {scanId}</span>
+                    <Link className="mt-3 inline-block text-xs font-semibold underline underline-offset-4" href={`/scans/${scanId}?url=${encodeURIComponent(submittedUrl)}`}>
+                      View scan status
+                    </Link>
                   </AlertDescription>
                 </Alert>
               )}
