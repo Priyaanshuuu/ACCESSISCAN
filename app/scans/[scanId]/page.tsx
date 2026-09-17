@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -68,9 +68,14 @@ export default async function ScanStatusPage({
                 </AlertDescription>
               </Alert>
 
-              <Button asChild className="bg-[#19382d] text-white hover:bg-[#285342]">
-                <Link href="/">Scan another website</Link>
-              </Button>
+              <Link
+                className={buttonVariants({
+                  className: "bg-[#19382d] text-white hover:bg-[#285342]",
+                })}
+                href="/"
+              >
+                Scan another website
+              </Link>
             </CardContent>
           </Card>
         </section>
