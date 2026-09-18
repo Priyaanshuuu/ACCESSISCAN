@@ -4,24 +4,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { scanQueue } from "@/lib/queue";
-
-function isValidWebsiteUrl(value: unknown): value is string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return false;
-  }
-
-  try {
-    const url = new URL(value.trim());
-    return (
-      (url.protocol === "https:" || url.protocol === "http:") &&
-      url.hostname.length > 0 &&
-      !url.username &&
-      !url.password
-    );
-  } catch {
-    return false;
-  }
-}
+import { assertPublicUrl } from "@/lib/url-safety";
 
 export async function POST(request: Request) {
   const user = await currentUser();
@@ -50,9 +33,19 @@ export async function POST(request: Request) {
       ? body.url
       : undefined;
 
-  if (!isValidWebsiteUrl(url)) {
+  if (typeof url !== "string" || url.trim().length === 0) {
     return NextResponse.json(
       { error: "A valid public website URL is required." },
+      { status: 400 },
+    );
+  }
+
+  let safeUrl: string;
+  try {
+    safeUrl = await assertPublicUrl(url);
+  } catch {
+    return NextResponse.json(
+      { error: "That URL points to a private or unsupported destination." },
       { status: 400 },
     );
   }
@@ -67,15 +60,15 @@ export async function POST(request: Request) {
       : null;
     const site = databaseUser
       ? await prisma.site.upsert({
-          create: { url: url.trim(), userId: databaseUser.id },
+          create: { url: safeUrl, userId: databaseUser.id },
           update: {},
-          where: { userId_url: { url: url.trim(), userId: databaseUser.id } },
+          where: { userId_url: { url: safeUrl, userId: databaseUser.id } },
         })
       : null;
     const scan = await prisma.scan.create({
       data: {
         id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
-        url: url.trim(),
+        url: safeUrl,
         userId: databaseUser?.id,
         siteId: site?.id,
       },

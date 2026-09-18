@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 
 import { prisma } from "@/lib/prisma";
 import type { ScanJob } from "@/lib/queue";
+import { assertPublicUrl } from "@/lib/url-safety";
 
 type AxeWindow = Window & {
   axe: {
@@ -77,11 +78,26 @@ const worker = new Worker<ScanJob>(
 
     console.log(`[scan-worker] processing ${scan.id} for ${job.data.url}`);
 
+    await assertPublicUrl(job.data.url);
+
     const startedAt = Date.now();
     const browser = await chromium.launch({ headless: true });
 
     try {
       const page = await browser.newPage();
+      await page.route("**/*", async (route) => {
+        try {
+          const requestUrl = new URL(route.request().url());
+          if (requestUrl.protocol !== "http:" && requestUrl.protocol !== "https:") {
+            await route.continue();
+            return;
+          }
+          await assertPublicUrl(requestUrl.toString());
+          await route.continue();
+        } catch {
+          await route.abort("blockedbyclient");
+        }
+      });
       const response = await page.goto(job.data.url, {
         timeout: 30_000,
         waitUntil: "domcontentloaded",
