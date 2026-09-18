@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
+import {
+  ClerkProvider,
+  Show,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
 import { Geist, Geist_Mono } from "next/font/google";
+import { buttonVariants } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -25,7 +33,24 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        <ClerkProvider>
+          <div className="fixed right-6 top-6 z-50 flex items-center gap-3">
+            <Show when="signed-out">
+              <SignInButton mode="modal">
+                <button className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} type="button">
+                  Sign in
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button className={buttonVariants({ variant: "outline" })} type="button">
+                  Sign up
+                </button>
+              </SignUpButton>
+            </Show>
+            <Show when="signed-in"><UserButton /></Show>
+          </div>
+          <TooltipProvider>{children}</TooltipProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

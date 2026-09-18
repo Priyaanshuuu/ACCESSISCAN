@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { Show, SignInButton } from "@clerk/nextjs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,6 +89,15 @@ export default function Home() {
               Scan a deployed site for accessibility, performance, and SEO issues, then get practical fixes in plain English.
             </p>
 
+            <Show when="signed-out">
+              <div className="mt-10 max-w-xl rounded-xl border border-[#d9e4d3] bg-white p-5 shadow-[0_8px_24px_rgba(25,56,45,0.05)]">
+                <p className="text-sm leading-6 text-[#5d6b62]">Sign in to start a scan and keep your results connected to your account.</p>
+                <SignInButton mode="modal">
+                  <Button className="mt-4 bg-[#19382d] text-white hover:bg-[#285342]" type="button">Sign in to scan</Button>
+                </SignInButton>
+              </div>
+            </Show>
+            <Show when="signed-in">
             <form className="mt-10 max-w-xl" onSubmit={handleSubmit} noValidate>
               <label className="mb-3 block text-sm font-semibold text-[#19382d]" htmlFor="website-url">
                 Website URL
@@ -120,7 +130,7 @@ export default function Home() {
                 </Alert>
               ) : (
                 <p className="mt-3 text-sm text-[#7b887e]" id="url-hint">
-                  Start with any public website. No account needed for the first scan.
+                  Start with any public website. Your scan will be saved to your account.
                 </p>
               )}
               {submittedUrl && (
@@ -136,6 +146,7 @@ export default function Home() {
                 </Alert>
               )}
             </form>
+            </Show>
           </div>
 
           <div className="relative mx-auto w-full max-w-md lg:mr-0">

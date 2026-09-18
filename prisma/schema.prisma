@@ -16,6 +16,8 @@ enum ScanStatus {
 model Scan {
   id          String     @id
   url         String
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   status      ScanStatus @default(QUEUED)
   finalUrl    String?
   pageTitle   String?
@@ -34,6 +36,16 @@ model Scan {
 
   @@index([createdAt])
   @@index([status])
+  @@index([userId])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  scans     Scan[]
 }
 
 model Issue {

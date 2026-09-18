@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 
 import { prisma } from "@/lib/prisma";
 
@@ -7,6 +8,11 @@ type ScanRouteProps = {
 };
 
 export async function GET(_request: Request, { params }: ScanRouteProps) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to view this scan." }, { status: 401 });
+  }
+
   const { scanId } = await params;
   const scan = await prisma.scan.findUnique({
     include: {
@@ -14,7 +20,10 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
         orderBy: [{ impact: "desc" }, { rule: "asc" }],
       },
     },
-    where: { id: scanId },
+    where: {
+      id: scanId,
+      user: { clerkId: userId },
+    },
   });
 
   if (!scan) {

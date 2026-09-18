@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
@@ -23,6 +24,11 @@ function isValidWebsiteUrl(value: unknown): value is string {
 }
 
 export async function POST(request: Request) {
+  const user = await currentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Sign in to start a scan." }, { status: 401 });
+  }
+
   let body: unknown;
 
   try {
@@ -47,10 +53,17 @@ export async function POST(request: Request) {
   }
 
   try {
+    const email = user.emailAddresses[0]?.emailAddress ?? null;
+    const databaseUser = await prisma.user.upsert({
+      create: { clerkId: user.id, email },
+      update: { email },
+      where: { clerkId: user.id },
+    });
     const scan = await prisma.scan.create({
       data: {
         id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
         url: url.trim(),
+        userId: databaseUser.id,
       },
     });
 
