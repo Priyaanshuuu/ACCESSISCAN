@@ -59,6 +59,7 @@ type ScanData = {
   id: string;
   issues: ScanIssue[];
   lighthouseAudits: unknown;
+  lighthouseError: string | null;
   lighthouseMetrics: unknown;
   overallScore: number | null;
   pageTitle: string | null;
@@ -292,6 +293,14 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
               <CardDescription>Lighthouse scores and loading metrics from the rendered page.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 p-6 pt-0 sm:p-8 sm:pt-0">
+              {scan.lighthouseError && (
+                <Alert className="border-[#f0d49a] bg-[#fff8e6] text-[#765d0b]">
+                  <AlertTitle>Performance checks unavailable</AlertTitle>
+                  <AlertDescription>
+                    Accessibility results are available, but Lighthouse could not finish on this scan. You can retry the scan later.
+                  </AlertDescription>
+                </Alert>
+              )}
               <ScoreBar label="Performance" score={scan.performanceScore} />
               <ScoreBar label="Best practices" score={scan.bestPracticesScore} />
               <Separator className="bg-[#e1e8df]" />
@@ -314,6 +323,14 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
               <CardDescription>Lighthouse SEO score and selected document checks.</CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-0 sm:p-8 sm:pt-0">
+              {scan.lighthouseError && (
+                <Alert className="mb-6 border-[#f0d49a] bg-[#fff8e6] text-[#765d0b]">
+                  <AlertTitle>SEO checks unavailable</AlertTitle>
+                  <AlertDescription>
+                    Lighthouse did not complete, so SEO scores are unavailable for this scan.
+                  </AlertDescription>
+                </Alert>
+              )}
               <ScoreBar label="SEO" score={scan.seoScore} />
               <Separator className="my-6 bg-[#e1e8df]" />
               <Table>

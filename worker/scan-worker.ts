@@ -131,7 +131,17 @@ const worker = new Worker<ScanJob>(
         })),
       });
 
-      const lighthouseResult = await runLighthouse(page.url());
+      let lighthouseResult: LighthouseResult | undefined;
+      let lighthouseError: string | null = null;
+
+      try {
+        lighthouseResult = await runLighthouse(page.url());
+      } catch (error) {
+        lighthouseError = error instanceof Error
+          ? error.message.slice(0, 1000)
+          : "Lighthouse could not complete.";
+        console.error(`[scan-worker] Lighthouse unavailable for ${scan.id}: ${lighthouseError}`);
+      }
 
       const audits = lighthouseResult?.audits || {};
       const categories = lighthouseResult?.categories || {};
@@ -154,6 +164,7 @@ const worker = new Worker<ScanJob>(
             ),
             seo: pickAudit(audits, "document-title", "meta-description", "http-status-code"),
           },
+          lighthouseError,
           lighthouseMetrics: pickAudit(audits, "largest-contentful-paint", "cumulative-layout-shift", "first-contentful-paint", "total-blocking-time"),
           pageTitle,
           overallScore: calculateOverallScore(accessibilityScore, performanceScore, seoScore, bestPracticesScore),

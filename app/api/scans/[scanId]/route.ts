@@ -44,6 +44,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       overallScore: scan.overallScore,
       bestPracticesScore: scan.bestPracticesScore,
       lighthouseAudits: scan.lighthouseAudits,
+      lighthouseError: scan.lighthouseError,
       lighthouseMetrics: scan.lighthouseMetrics,
       pageTitle: scan.pageTitle,
       performanceScore: scan.performanceScore,
