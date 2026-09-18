@@ -17,6 +17,10 @@ model Scan {
   id          String     @id
   url         String
   status      ScanStatus @default(QUEUED)
+  finalUrl    String?
+  pageTitle   String?
+  httpStatus  Int?
+  durationMs  Int?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   completedAt DateTime?

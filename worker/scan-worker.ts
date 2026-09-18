@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { Worker } from "bullmq";
+import { chromium } from "playwright";
 
 import { prisma } from "@/lib/prisma";
 import type { ScanJob } from "@/lib/queue";
@@ -33,14 +34,31 @@ const worker = new Worker<ScanJob>(
 
     console.log(`[scan-worker] processing ${scan.id} for ${job.data.url}`);
 
-    // Step 8 adds Playwright navigation and real website processing here.
-    await prisma.scan.update({
-      data: {
-        completedAt: new Date(),
-        status: "COMPLETED",
-      },
-      where: { id: scan.id },
-    });
+    const startedAt = Date.now();
+    const browser = await chromium.launch({ headless: true });
+
+    try {
+      const page = await browser.newPage();
+      const response = await page.goto(job.data.url, {
+        timeout: 30_000,
+        waitUntil: "domcontentloaded",
+      });
+      const pageTitle = await page.title();
+
+      await prisma.scan.update({
+        data: {
+          completedAt: new Date(),
+          durationMs: Date.now() - startedAt,
+          finalUrl: page.url(),
+          httpStatus: response?.status() ?? null,
+          pageTitle,
+          status: "COMPLETED",
+        },
+        where: { id: scan.id },
+      });
+    } finally {
+      await browser.close();
+    }
 
     return { scanId: scan.id, status: "completed" };
   },
