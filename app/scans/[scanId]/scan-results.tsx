@@ -30,15 +30,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type ScanIssue = {
   description: string;
+  fix: string | null;
   help: string;
   helpUrl: string;
   html: string | null;
   id: string;
   impact: string | null;
   rule: string;
+  recommendation: string | null;
+  severity: string;
   tags: unknown;
   targets: unknown;
 };
@@ -52,6 +60,7 @@ type ScanData = {
   issues: ScanIssue[];
   lighthouseAudits: unknown;
   lighthouseMetrics: unknown;
+  overallScore: number | null;
   pageTitle: string | null;
   performanceScore: number | null;
   seoScore: number | null;
@@ -73,6 +82,10 @@ const impactStyles: Record<string, string> = {
 
 function formatImpact(impact: string | null) {
   return impact ? impact.charAt(0).toUpperCase() + impact.slice(1) : "Needs review";
+}
+
+function formatSeverity(severity: string) {
+  return severity.charAt(0).toUpperCase() + severity.slice(1);
 }
 
 function getList(value: unknown) {
@@ -208,9 +221,9 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
           </div>
         </CardHeader>
         <CardContent className="grid gap-5 p-6 sm:grid-cols-4 sm:p-8">
-          <div><p className="text-xs uppercase tracking-[0.16em] text-[#89958c]">Issues</p><p className="mt-1 text-3xl font-semibold text-[#19382d]">{scan.issues.length}</p></div>
-          <div><p className="text-xs uppercase tracking-[0.16em] text-[#89958c]">Critical</p><p className="mt-1 text-3xl font-semibold text-[#8b3023]">{impactCounts.critical || 0}</p></div>
-          <div><p className="text-xs uppercase tracking-[0.16em] text-[#89958c]">Status</p><p className="mt-2 text-sm font-semibold text-[#19382d]">HTTP {scan.httpStatus || "-"}</p></div>
+          <div><ScoreLabel explanation="Weighted score across accessibility, performance, SEO, and best practices." label="Overall" score={scan.overallScore} /></div>
+          <div><ScoreLabel explanation="Total number of automated accessibility findings." label="Issues" score={scan.issues.length} /></div>
+          <div><p className="text-xs uppercase tracking-[0.16em] text-[#89958c]">HTTP status</p><p className="mt-2 text-sm font-semibold text-[#19382d]">{scan.httpStatus || "-"}</p></div>
           <div><p className="text-xs uppercase tracking-[0.16em] text-[#89958c]">Duration</p><p className="mt-2 text-sm font-semibold text-[#19382d]">{scan.durationMs ? `${(scan.durationMs / 1000).toFixed(1)}s` : "-"}</p></div>
         </CardContent>
       </Card>
@@ -238,11 +251,23 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                     <span className="block truncate font-semibold text-[#19382d]">{issue.help}</span>
                     <span className="mt-1 block font-mono text-xs font-normal text-[#89958c]">{issue.rule}</span>
                   </span>
-                  <Badge className={impactStyles[issue.impact || ""] || "bg-[#eef1ed] text-[#5d6b62]"}>{formatImpact(issue.impact)}</Badge>
+                  <Badge className={impactStyles[issue.severity] || "bg-[#eef1ed] text-[#5d6b62]"}>{formatSeverity(issue.severity)}</Badge>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4 pb-4 text-sm text-[#5d6b62]">
                     <p>{issue.description}</p>
+                    {issue.recommendation && (
+                      <div className="rounded-lg border border-[#d9e4d3] bg-[#f7faf4] p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#688227]">Why it matters</p>
+                        <p className="mt-1">{issue.recommendation}</p>
+                      </div>
+                    )}
+                    {issue.fix && (
+                      <div className="rounded-lg border border-[#c8df93] bg-[#eff8d7] p-3 text-[#38531f]">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em]">Suggested fix</p>
+                        <p className="mt-1">{issue.fix}</p>
+                      </div>
+                    )}
                     <div>
                       <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-[#89958c]">Affected target</p>
                       <div className="space-y-1 font-mono text-xs text-[#38531f]">
@@ -306,5 +331,25 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
 
       <a className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} href="/">Scan another website</a>
     </div>
+  );
+}
+
+function ScoreLabel({
+  explanation,
+  label,
+  score,
+}: {
+  explanation: string;
+  label: string;
+  score: number | null;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger className="cursor-help border-b border-dashed border-[#89958c]" type="button">
+        <span className="text-xs uppercase tracking-[0.16em] text-[#89958c]">{label}</span>
+      </TooltipTrigger>
+      <TooltipContent>{explanation}</TooltipContent>
+      <p className="mt-1 text-3xl font-semibold text-[#19382d]">{score ?? "-"}</p>
+    </Tooltip>
   );
 }

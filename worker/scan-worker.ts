@@ -20,6 +20,33 @@ type LighthouseResult = {
   audits?: Record<string, { score: number | null; numericValue?: number; displayValue?: string }>;
 };
 
+const fixTemplates: Record<string, { fix: string; recommendation: string }> = {
+  "button-name": {
+    fix: "Add visible text or an accessible aria-label that describes the button action.",
+    recommendation: "Every button needs a clear accessible name so screen-reader users know what it does.",
+  },
+  "color-contrast": {
+    fix: "Increase the foreground/background contrast to meet WCAG AA requirements.",
+    recommendation: "Use a contrast checker and verify normal text reaches 4.5:1 and large text reaches 3:1.",
+  },
+  "document-title": {
+    fix: "Add a unique, descriptive <title> element to the page head.",
+    recommendation: "Use a concise title that identifies the page and its purpose.",
+  },
+  "html-has-lang": {
+    fix: "Add a valid lang attribute to the root html element, such as lang=\"en\".",
+    recommendation: "The document language lets assistive technology select the correct pronunciation rules.",
+  },
+  "image-alt": {
+    fix: "Add meaningful alt text, or use alt=\"\" when the image is decorative.",
+    recommendation: "Describe the image's purpose rather than its visual appearance alone.",
+  },
+  label: {
+    fix: "Associate the form control with a visible label using label htmlFor or an aria-label.",
+    recommendation: "A programmatic label helps everyone understand what information the field requires.",
+  },
+};
+
 const execFileAsync = promisify(execFile);
 
 const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
@@ -73,12 +100,15 @@ const worker = new Worker<ScanJob>(
       await prisma.issue.createMany({
         data: axeResults.violations.map((violation) => ({
           description: violation.description,
+          fix: fixTemplates[violation.id]?.fix ?? "Review the linked guidance and update the affected markup.",
           help: violation.help,
           helpUrl: violation.helpUrl,
           html: violation.nodes[0]?.html ?? null,
           impact: violation.impact,
+          recommendation: fixTemplates[violation.id]?.recommendation ?? "Fix this issue in the affected component, then scan again to confirm the result.",
           rule: violation.id,
           scanId: scan.id,
+          severity: normalizeSeverity(violation.impact),
           tags: violation.tags,
           targets: violation.nodes.map((node) => node.target),
         })),
@@ -88,10 +118,14 @@ const worker = new Worker<ScanJob>(
 
       const audits = lighthouseResult?.audits || {};
       const categories = lighthouseResult?.categories || {};
+      const performanceScore = toScore(categories.performance?.score);
+      const seoScore = toScore(categories.seo?.score);
+      const bestPracticesScore = toScore(categories["best-practices"]?.score);
+      const accessibilityScore = calculateAccessibilityScore(axeResults.violations);
 
       await prisma.scan.update({
         data: {
-          bestPracticesScore: toScore(categories["best-practices"]?.score),
+          bestPracticesScore,
           completedAt: new Date(),
           durationMs: Date.now() - startedAt,
           finalUrl: page.url(),
@@ -105,8 +139,9 @@ const worker = new Worker<ScanJob>(
           },
           lighthouseMetrics: pickAudit(audits, "largest-contentful-paint", "cumulative-layout-shift", "first-contentful-paint", "total-blocking-time"),
           pageTitle,
-          performanceScore: toScore(categories.performance?.score),
-          seoScore: toScore(categories.seo?.score),
+          overallScore: calculateOverallScore(accessibilityScore, performanceScore, seoScore, bestPracticesScore),
+          performanceScore,
+          seoScore,
           status: "COMPLETED",
         },
         where: { id: scan.id },
@@ -185,4 +220,30 @@ async function runLighthouse(url: string) {
   );
 
   return JSON.parse(stdout) as LighthouseResult;
+}
+
+function normalizeSeverity(impact: string | null) {
+  if (impact === "critical" || impact === "serious") return "critical";
+  if (impact === "moderate") return "warning";
+  return "info";
+}
+
+function calculateAccessibilityScore(violations: AxeResults["violations"]) {
+  const penalty = violations.reduce((total, violation) => {
+    const weight = violation.impact === "critical" ? 20 : violation.impact === "serious" ? 12 : violation.impact === "moderate" ? 6 : 2;
+    return total + weight;
+  }, 0);
+  return Math.max(0, 100 - penalty);
+}
+
+function calculateOverallScore(
+  accessibility: number,
+  performance: number | null,
+  seo: number | null,
+  bestPractices: number | null,
+) {
+  if (performance === null || seo === null || bestPractices === null) return null;
+  return Math.round(
+    accessibility * 0.4 + performance * 0.25 + seo * 0.2 + bestPractices * 0.15,
+  );
 }

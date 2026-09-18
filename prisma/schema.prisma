@@ -21,6 +21,7 @@ model Scan {
   pageTitle   String?
   httpStatus  Int?
   durationMs  Int?
+  overallScore Int?
   performanceScore Int?
   seoScore         Int?
   bestPracticesScore Int?
@@ -41,12 +42,15 @@ model Issue {
   scan        Scan    @relation(fields: [scanId], references: [id], onDelete: Cascade)
   rule        String
   impact      String?
+  severity    String   @default("info")
   description String
   help        String
   helpUrl     String
   html        String?
   targets     Json
   tags        Json
+  fix         String?
+  recommendation String?
   createdAt   DateTime @default(now())
 
   @@index([scanId])
