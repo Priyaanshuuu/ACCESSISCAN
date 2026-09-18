@@ -136,9 +136,9 @@ accessiscan/
 
 ---
 
-## Planned GitHub Action
+## GitHub Action
 
-When the action is implemented, users will be able to add the following workflow:
+Add the following workflow after setting `ACCESSISCAN_API_KEY` in repository secrets:
 
 ```yaml
 name: AccessiScan
@@ -150,12 +150,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: accessiscan/action@v1
+      - uses: ./\.github/actions/accessiscan
         with:
           api-key: ${{ secrets.ACCESSISCAN_API_KEY }}
           url: ${{ github.event.deployment_status.target_url }}
           comment-on-pr: true
-          fail-on-error: false
+          fail-on-severity: critical
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 **Outputs:** `score`, `issues-count`, `report-url`

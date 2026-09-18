@@ -9,7 +9,11 @@ type ScanRouteProps = {
 
 export async function GET(_request: Request, { params }: ScanRouteProps) {
   const { userId } = await auth();
-  if (!userId) {
+  const actionKey = _request.headers.get("x-accessiscan-api-key");
+  const isActionRequest = Boolean(
+    actionKey && process.env.ACCESSISCAN_ACTION_API_KEY && actionKey === process.env.ACCESSISCAN_ACTION_API_KEY,
+  );
+  if (!userId && !isActionRequest) {
     return NextResponse.json({ error: "Sign in to view this scan." }, { status: 401 });
   }
 
@@ -20,10 +24,9 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
         orderBy: [{ impact: "desc" }, { rule: "asc" }],
       },
     },
-    where: {
-      id: scanId,
-      user: { clerkId: userId },
-    },
+    where: userId
+      ? { id: scanId, user: { clerkId: userId } }
+      : { id: scanId, userId: null },
   });
 
   if (!scan) {

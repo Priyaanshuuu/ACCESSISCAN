@@ -25,7 +25,12 @@ function isValidWebsiteUrl(value: unknown): value is string {
 
 export async function POST(request: Request) {
   const user = await currentUser();
-  if (!user) {
+  const actionKey = request.headers.get("x-accessiscan-api-key");
+  const isActionRequest = Boolean(
+    actionKey && process.env.ACCESSISCAN_ACTION_API_KEY && actionKey === process.env.ACCESSISCAN_ACTION_API_KEY,
+  );
+
+  if (!user && !isActionRequest) {
     return NextResponse.json({ error: "Sign in to start a scan." }, { status: 401 });
   }
 
@@ -53,23 +58,26 @@ export async function POST(request: Request) {
   }
 
   try {
-    const email = user.emailAddresses[0]?.emailAddress ?? null;
-    const databaseUser = await prisma.user.upsert({
-      create: { clerkId: user.id, email },
-      update: { email },
-      where: { clerkId: user.id },
-    });
-    const site = await prisma.site.upsert({
-      create: { url: url.trim(), userId: databaseUser.id },
-      update: {},
-      where: { userId_url: { url: url.trim(), userId: databaseUser.id } },
-    });
+    const databaseUser = user
+      ? await prisma.user.upsert({
+          create: { clerkId: user.id, email: user.emailAddresses[0]?.emailAddress ?? null },
+          update: { email: user.emailAddresses[0]?.emailAddress ?? null },
+          where: { clerkId: user.id },
+        })
+      : null;
+    const site = databaseUser
+      ? await prisma.site.upsert({
+          create: { url: url.trim(), userId: databaseUser.id },
+          update: {},
+          where: { userId_url: { url: url.trim(), userId: databaseUser.id } },
+        })
+      : null;
     const scan = await prisma.scan.create({
       data: {
         id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
         url: url.trim(),
-        userId: databaseUser.id,
-        siteId: site.id,
+        userId: databaseUser?.id,
+        siteId: site?.id,
       },
     });
 

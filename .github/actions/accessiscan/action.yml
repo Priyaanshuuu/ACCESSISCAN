@@ -1,0 +1,93 @@
+name: AccessiScan
+description: Scan a deployed website and report accessibility, performance, and SEO results.
+inputs:
+  api-key:
+    description: AccessiScan API key.
+    required: true
+  url:
+    description: Public URL to scan.
+    required: true
+  api-url:
+    description: AccessiScan API base URL.
+    required: false
+    default: https://accessiscan.com
+  comment-on-pr:
+    description: Post the result as a pull request comment.
+    required: false
+    default: "true"
+  fail-on-severity:
+    description: Fail when an issue reaches this severity: critical, warning, or info.
+    required: false
+    default: critical
+  github-token:
+    description: GitHub token used to comment on pull requests.
+    required: false
+outputs:
+  scan-id:
+    description: Created AccessiScan scan ID.
+  score:
+    description: Overall scan score.
+  issues-count:
+    description: Number of accessibility issues.
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v7
+      env:
+        ACCESSISCAN_API_KEY: ${{ inputs.api-key }}
+        ACCESSISCAN_API_URL: ${{ inputs.api-url }}
+        ACCESSISCAN_FAIL_ON_SEVERITY: ${{ inputs.fail-on-severity }}
+        ACCESSISCAN_SCAN_URL: ${{ inputs.url }}
+      with:
+        github-token: ${{ inputs.github-token || github.token }}
+        script: |
+          const apiUrl = process.env.ACCESSISCAN_API_URL.replace(/\/$/, '')
+          const headers = {
+            'Content-Type': 'application/json',
+            'x-accessiscan-api-key': process.env.ACCESSISCAN_API_KEY,
+          }
+
+          async function request(path, options = {}) {
+            const response = await fetch(`${apiUrl}${path}`, {
+              ...options,
+              headers: { ...headers, ...options.headers },
+            })
+            const data = await response.json()
+            if (!response.ok) throw new Error(data.error || `AccessiScan request failed with ${response.status}.`)
+            return data
+          }
+
+          const created = await request('/api/scans', {
+            body: JSON.stringify({ url: process.env.ACCESSISCAN_SCAN_URL }),
+            method: 'POST',
+          })
+          core.setOutput('scan-id', created.scanId)
+
+          let result
+          for (let attempt = 0; attempt < 60; attempt += 1) {
+            result = (await request(`/api/scans/${created.scanId}`)).scan
+            if (result.status === 'completed' || result.status === 'failed') break
+            await new Promise((resolve) => setTimeout(resolve, 5000))
+          }
+
+          if (!result || result.status !== 'completed') throw new Error('AccessiScan did not complete successfully.')
+
+          core.setOutput('score', result.overallScore ?? '')
+          core.setOutput('issues-count', String(result.issues.length))
+
+          const rank = { info: 1, warning: 2, critical: 3 }
+          const threshold = rank[process.env.ACCESSISCAN_FAIL_ON_SEVERITY] || rank.critical
+          const blockingIssues = result.issues.filter((issue) => rank[issue.severity] >= threshold)
+          const summary = `AccessiScan score: ${result.overallScore ?? '-'} | Issues: ${result.issues.length} | Blocking: ${blockingIssues.length}`
+          core.notice(summary)
+
+          if ('${{ inputs.comment-on-pr }}' === 'true' && context.payload.pull_request) {
+            await github.rest.issues.createComment({
+              body: `## AccessiScan\n\n${summary}\n\n[View scan results](${apiUrl}/scans/${created.scanId})`,
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            })
+          }
+
+          if (blockingIssues.length > 0) core.setFailed(`${blockingIssues.length} issue(s) met fail-on-severity=${process.env.ACCESSISCAN_FAIL_ON_SEVERITY}.`)
