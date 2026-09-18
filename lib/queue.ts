@@ -10,6 +10,7 @@ export const redisConnection = {
 };
 
 export type ScanJob = {
+  identity: string;
   scanId: string;
   url: string;
 };

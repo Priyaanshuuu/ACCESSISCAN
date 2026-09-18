@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 
 import { prisma } from "@/lib/prisma";
 import type { ScanJob } from "@/lib/queue";
+import { releaseScanSlot } from "@/lib/rate-limit";
 import { assertPublicUrl } from "@/lib/url-safety";
 
 type AxeWindow = Window & {
@@ -176,6 +177,7 @@ const worker = new Worker<ScanJob>(
 
 worker.on("completed", (job) => {
   console.log(`[scan-worker] completed job ${job.id}`);
+  void releaseScanSlot(job.data.identity);
 });
 
 function toScore(value: number | null | undefined) {
@@ -205,6 +207,10 @@ worker.on("failed", async (job, error) => {
     data: { status: "FAILED" },
     where: { id: job.data.scanId },
   });
+
+  if (job) {
+    await releaseScanSlot(job.data.identity);
+  }
 });
 
 async function shutdown(signal: string) {
@@ -238,7 +244,7 @@ async function runLighthouse(url: string) {
   return JSON.parse(stdout) as LighthouseResult;
 }
 
-function normalizeSeverity(impact: string | null) {
+function normalizeSeverity(impact: string | null | undefined) {
   if (impact === "critical" || impact === "serious") return "critical";
   if (impact === "moderate") return "warning";
   return "info";

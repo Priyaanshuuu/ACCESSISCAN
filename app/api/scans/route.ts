@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { scanQueue } from "@/lib/queue";
+import { consumeScanRateLimit, releaseScanSlot, reserveScanSlot } from "@/lib/rate-limit";
 import { assertPublicUrl } from "@/lib/url-safety";
 
 export async function POST(request: Request) {
@@ -15,6 +16,23 @@ export async function POST(request: Request) {
 
   if (!user && !isActionRequest) {
     return NextResponse.json({ error: "Sign in to start a scan." }, { status: 401 });
+  }
+
+  const identity = user ? `user:${user.id}` : `action:${actionKey}`;
+  const rateLimit = await consumeScanRateLimit(identity, isActionRequest ? 30 : 10);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Scan limit reached. Please try again later." },
+      { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
+    );
+  }
+
+  const slot = await reserveScanSlot(identity, 2);
+  if (!slot.allowed) {
+    return NextResponse.json(
+      { error: "Too many scans are already running for this identity." },
+      { headers: { "Retry-After": "60" }, status: 429 },
+    );
   }
 
   let body: unknown;
@@ -76,10 +94,12 @@ export async function POST(request: Request) {
 
     try {
       await scanQueue.add("scan-website", {
+        identity,
         scanId: scan.id,
         url: scan.url,
       });
     } catch {
+      await releaseScanSlot(identity);
       await prisma.scan.update({
         data: { status: "FAILED" },
         where: { id: scan.id },
@@ -100,6 +120,7 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
+    await releaseScanSlot(identity);
     console.error("[api/scans] failed to create scan", {
       code: error instanceof Error && "code" in error ? error.code : undefined,
       message: error instanceof Error ? error.message : "Unknown database error",
