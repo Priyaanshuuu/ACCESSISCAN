@@ -1,0 +1,18 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: accessiscan-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - accessiscan-redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  accessiscan-redis-data:

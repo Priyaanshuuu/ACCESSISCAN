@@ -9,16 +9,20 @@
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "redis:up": "docker compose up -d redis",
+    "redis:down": "docker compose down",
+    "redis:logs": "docker compose logs -f redis"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "axe-core": "^4.13.0",
-    "bullmq": "^6.3.6",
+    "bullmq": "^6.3.7",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",
+    "ioredis": "^6.0.0",
     "lighthouse": "^13.4.1",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",

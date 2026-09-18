@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { scanQueue } from "@/lib/queue";
 
 function isValidWebsiteUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -52,6 +53,23 @@ export async function POST(request: Request) {
         url: url.trim(),
       },
     });
+
+    try {
+      await scanQueue.add("scan-website", {
+        scanId: scan.id,
+        url: scan.url,
+      });
+    } catch {
+      await prisma.scan.update({
+        data: { status: "FAILED" },
+        where: { id: scan.id },
+      });
+
+      return NextResponse.json(
+        { error: "The scan queue is unavailable right now." },
+        { status: 503 },
+      );
+    }
 
     return NextResponse.json(
       {
