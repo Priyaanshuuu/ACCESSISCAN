@@ -12,7 +12,8 @@
     "db:studio": "prisma studio",
     "redis:up": "docker compose up -d redis",
     "redis:down": "docker compose down",
-    "redis:logs": "docker compose logs -f redis"
+    "redis:logs": "docker compose logs -f redis",
+    "worker": "tsx worker/scan-worker.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -22,6 +23,7 @@
     "bullmq": "^6.3.7",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",
+    "dotenv": "^18.0.0",
     "ioredis": "^6.0.0",
     "lighthouse": "^13.4.1",
     "lucide-react": "^1.47.0",
@@ -43,6 +45,7 @@
     "eslint-config-next": "16.3.5",
     "prisma": "^7.10.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }
