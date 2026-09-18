@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { AxeResults } from "axe-core";
 import { Worker } from "bullmq";
 import { chromium } from "playwright";
@@ -12,6 +14,13 @@ type AxeWindow = Window & {
     run: () => Promise<AxeResults>;
   };
 };
+
+type LighthouseResult = {
+  categories?: Record<string, { score: number | null }>;
+  audits?: Record<string, { score: number | null; numericValue?: number; displayValue?: string }>;
+};
+
+const execFileAsync = promisify(execFile);
 
 const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 const parsedRedisUrl = new URL(redisUrl);
@@ -75,13 +84,29 @@ const worker = new Worker<ScanJob>(
         })),
       });
 
+      const lighthouseResult = await runLighthouse(page.url());
+
+      const audits = lighthouseResult?.audits || {};
+      const categories = lighthouseResult?.categories || {};
+
       await prisma.scan.update({
         data: {
+          bestPracticesScore: toScore(categories["best-practices"]?.score),
           completedAt: new Date(),
           durationMs: Date.now() - startedAt,
           finalUrl: page.url(),
           httpStatus: response?.status() ?? null,
+          lighthouseAudits: {
+            accessibility: pickAudit(audits, "accessibility", "accessibilityScore"),
+            categories: Object.fromEntries(
+              Object.entries(categories).map(([key, value]) => [key, value.score]),
+            ),
+            seo: pickAudit(audits, "document-title", "meta-description", "http-status-code"),
+          },
+          lighthouseMetrics: pickAudit(audits, "largest-contentful-paint", "cumulative-layout-shift", "first-contentful-paint", "total-blocking-time"),
           pageTitle,
+          performanceScore: toScore(categories.performance?.score),
+          seoScore: toScore(categories.seo?.score),
           status: "COMPLETED",
         },
         where: { id: scan.id },
@@ -101,6 +126,21 @@ const worker = new Worker<ScanJob>(
 worker.on("completed", (job) => {
   console.log(`[scan-worker] completed job ${job.id}`);
 });
+
+function toScore(value: number | null | undefined) {
+  return typeof value === "number" ? Math.round(value * 100) : null;
+}
+
+function pickAudit(
+  audits: Record<string, { score: number | null; numericValue?: number; displayValue?: string }>,
+  ...keys: string[]
+) {
+  return Object.fromEntries(
+    keys
+      .filter((key) => audits[key])
+      .map((key) => [key, audits[key]]),
+  );
+}
 
 worker.on("failed", async (job, error) => {
   if (!job) {
@@ -127,3 +167,22 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 console.log("[scan-worker] listening on the scan queue");
+
+async function runLighthouse(url: string) {
+  const lighthouseCli = require.resolve("lighthouse/cli/index.js");
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [
+      lighthouseCli,
+      url,
+      "--output=json",
+      "--output-path=stdout",
+      "--only-categories=performance,seo,best-practices",
+      "--chrome-flags=--headless --no-sandbox --disable-dev-shm-usage",
+      "--quiet",
+    ],
+    { maxBuffer: 25 * 1024 * 1024 },
+  );
+
+  return JSON.parse(stdout) as LighthouseResult;
+}

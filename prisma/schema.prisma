@@ -21,6 +21,11 @@ model Scan {
   pageTitle   String?
   httpStatus  Int?
   durationMs  Int?
+  performanceScore Int?
+  seoScore         Int?
+  bestPracticesScore Int?
+  lighthouseMetrics Json?
+  lighthouseAudits  Json?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   completedAt DateTime?

@@ -20,6 +20,16 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type ScanIssue = {
   description: string;
@@ -34,12 +44,17 @@ type ScanIssue = {
 };
 
 type ScanData = {
+  bestPracticesScore: number | null;
   durationMs: number | null;
   finalUrl: string | null;
   httpStatus: number | null;
   id: string;
   issues: ScanIssue[];
+  lighthouseAudits: unknown;
+  lighthouseMetrics: unknown;
   pageTitle: string | null;
+  performanceScore: number | null;
+  seoScore: number | null;
   status: string;
   url: string;
 };
@@ -62,6 +77,35 @@ function formatImpact(impact: string | null) {
 
 function getList(value: unknown) {
   return Array.isArray(value) ? value.flatMap((item) => (Array.isArray(item) ? item : [item])) : [];
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function getAuditValue(value: unknown) {
+  const audit = getRecord(value);
+  return typeof audit.displayValue === "string"
+    ? audit.displayValue
+    : typeof audit.numericValue === "number"
+      ? String(Math.round(audit.numericValue))
+      : "-";
+}
+
+function ScoreBar({ label, score }: { label: string; score: number | null }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-sm">
+        <span className="font-medium text-[#38531f]">{label}</span>
+        <span className="font-semibold text-[#19382d]">{score ?? "-"}</span>
+      </div>
+      <Progress className="gap-0" value={score ?? 0}>
+        <span className="sr-only">{label} score: {score ?? "not available"}</span>
+      </Progress>
+    </div>
+  );
 }
 
 export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
@@ -146,6 +190,9 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
     counts[impact] = (counts[impact] || 0) + 1;
     return counts;
   }, {});
+  const metrics = getRecord(scan.lighthouseMetrics);
+  const audits = getRecord(scan.lighthouseAudits);
+  const seoAudits = getRecord(audits.seo);
 
   return (
     <div className="w-full max-w-3xl space-y-5">
@@ -168,14 +215,22 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
         </CardContent>
       </Card>
 
-      <Card className="border-[#d0ddca] bg-white">
-        <CardHeader className="p-6 pb-3 sm:p-8 sm:pb-4">
-          <CardTitle className="text-xl text-[#19382d]">Accessibility issues</CardTitle>
-          <CardDescription>{scan.issues.length ? "Review each finding and its affected elements." : "No automated accessibility issues were found."}</CardDescription>
-        </CardHeader>
-        <CardContent className="p-6 pt-0 sm:p-8 sm:pt-0">
-          {scan.issues.length > 0 && <Separator className="mb-2 bg-[#e1e8df]" />}
-          <Accordion>
+      <Tabs className="w-full" defaultValue="accessibility">
+        <TabsList className="w-full bg-[#e6eee1] sm:w-fit">
+          <TabsTrigger value="accessibility">Accessibility</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="seo">SEO</TabsTrigger>
+        </TabsList>
+
+        <TabsContent className="mt-5" value="accessibility">
+          <Card className="border-[#d0ddca] bg-white">
+            <CardHeader className="p-6 pb-3 sm:p-8 sm:pb-4">
+              <CardTitle className="text-xl text-[#19382d]">Accessibility issues</CardTitle>
+              <CardDescription>{scan.issues.length ? "Review each finding and its affected elements." : "No automated accessibility issues were found."}</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 pt-0 sm:p-8 sm:pt-0">
+              {scan.issues.length > 0 && <Separator className="mb-2 bg-[#e1e8df]" />}
+              <Accordion>
             {scan.issues.map((issue) => (
               <AccordionItem key={issue.id} value={issue.id}>
                 <AccordionTrigger className="gap-4 py-4 hover:no-underline">
@@ -200,9 +255,54 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                 </AccordionContent>
               </AccordionItem>
             ))}
-          </Accordion>
-        </CardContent>
-      </Card>
+              </Accordion>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent className="mt-5" value="performance">
+          <Card className="border-[#d0ddca] bg-white">
+            <CardHeader className="p-6 sm:p-8">
+              <CardTitle className="text-xl text-[#19382d]">Performance and best practices</CardTitle>
+              <CardDescription>Lighthouse scores and loading metrics from the rendered page.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6 p-6 pt-0 sm:p-8 sm:pt-0">
+              <ScoreBar label="Performance" score={scan.performanceScore} />
+              <ScoreBar label="Best practices" score={scan.bestPracticesScore} />
+              <Separator className="bg-[#e1e8df]" />
+              <Table>
+                <TableHeader><TableRow><TableHead>Metric</TableHead><TableHead>Value</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {["first-contentful-paint", "largest-contentful-paint", "cumulative-layout-shift", "total-blocking-time"].map((key) => (
+                    <TableRow key={key}><TableCell className="font-medium text-[#38531f]">{key}</TableCell><TableCell>{getAuditValue(metrics[key])}</TableCell></TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent className="mt-5" value="seo">
+          <Card className="border-[#d0ddca] bg-white">
+            <CardHeader className="p-6 sm:p-8">
+              <CardTitle className="text-xl text-[#19382d]">SEO checks</CardTitle>
+              <CardDescription>Lighthouse SEO score and selected document checks.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 pt-0 sm:p-8 sm:pt-0">
+              <ScoreBar label="SEO" score={scan.seoScore} />
+              <Separator className="my-6 bg-[#e1e8df]" />
+              <Table>
+                <TableHeader><TableRow><TableHead>Audit</TableHead><TableHead>Result</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {Object.entries(seoAudits).map(([key, value]) => (
+                    <TableRow key={key}><TableCell className="font-medium text-[#38531f]">{key}</TableCell><TableCell>{getAuditValue(value)}</TableCell></TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <a className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} href="/">Scan another website</a>
     </div>
