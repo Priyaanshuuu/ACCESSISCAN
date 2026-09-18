@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScanResults } from "./scan-results";
 
 type ScanStatusPageProps = {
   params: Promise<{ scanId: string }>;
@@ -36,48 +37,7 @@ export default async function ScanStatusPage({
         </header>
 
         <section className="flex flex-1 items-center justify-center py-12">
-          <Card className="w-full max-w-2xl border-[#d0ddca] bg-white shadow-[0_24px_70px_rgba(25,56,45,0.1)]">
-            <CardHeader className="border-b border-[#e1e8df] p-6 sm:p-8">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <CardDescription className="text-[#718078]">Your scan request</CardDescription>
-                  <CardTitle className="mt-2 text-2xl tracking-[-0.03em] text-[#19382d]">Preparing your website scan</CardTitle>
-                </div>
-                <Badge className="w-fit bg-[#eff8d7] text-[#58713b] hover:bg-[#eff8d7]">Queued</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6 p-6 sm:p-8">
-              <div className="space-y-2">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#89958c]">Website</p>
-                {url ? (
-                  <p className="break-all text-base font-medium text-[#19382d]">{url}</p>
-                ) : (
-                  <Skeleton className="h-5 w-3/4 bg-[#e3eddb]" />
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#89958c]">Scan ID</p>
-                <p className="break-all font-mono text-sm text-[#5d6b62]">{scanId}</p>
-              </div>
-
-              <Alert className="border-[#d9e4d3] bg-[#f7faf4] text-[#38531f]">
-                <AlertTitle>Waiting for the scanner</AlertTitle>
-                <AlertDescription className="text-[#68776d]">
-                  The worker and persistent scan status will be connected in the next infrastructure steps.
-                </AlertDescription>
-              </Alert>
-
-              <Link
-                className={buttonVariants({
-                  className: "bg-[#19382d] text-white hover:bg-[#285342]",
-                })}
-                href="/"
-              >
-                Scan another website
-              </Link>
-            </CardContent>
-          </Card>
+          <ScanResults initialUrl={url} scanId={scanId} />
         </section>
       </div>
     </main>
