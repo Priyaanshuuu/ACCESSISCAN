@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Show, SignInButton } from "@clerk/nextjs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -17,11 +18,17 @@ function isValidWebsiteUrl(value: string) {
 }
 
 export default function Home() {
+  const searchParams = useSearchParams();
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedUrl, setSubmittedUrl] = useState("");
   const [scanId, setScanId] = useState("");
+
+  useEffect(() => {
+    const savedUrl = searchParams.get("url");
+    if (savedUrl) setUrl(savedUrl);
+  }, [searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

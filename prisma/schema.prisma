@@ -18,6 +18,8 @@ model Scan {
   url         String
   userId      String?
   user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  siteId      String?
+  site        Site?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
   status      ScanStatus @default(QUEUED)
   finalUrl    String?
   pageTitle   String?
@@ -37,6 +39,7 @@ model Scan {
   @@index([createdAt])
   @@index([status])
   @@index([userId])
+  @@index([siteId])
 }
 
 model User {
@@ -46,6 +49,21 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   scans     Scan[]
+  sites     Site[]
+}
+
+model Site {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url       String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  scans     Scan[]
+
+  @@unique([userId, url])
+  @@index([userId])
 }
 
 model Issue {

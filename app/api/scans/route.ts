@@ -59,11 +59,17 @@ export async function POST(request: Request) {
       update: { email },
       where: { clerkId: user.id },
     });
+    const site = await prisma.site.upsert({
+      create: { url: url.trim(), userId: databaseUser.id },
+      update: {},
+      where: { userId_url: { url: url.trim(), userId: databaseUser.id } },
+    });
     const scan = await prisma.scan.create({
       data: {
         id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
         url: url.trim(),
         userId: databaseUser.id,
+        siteId: site.id,
       },
     });
 

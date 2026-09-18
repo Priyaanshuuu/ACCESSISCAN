@@ -7,6 +7,7 @@ import {
   UserButton,
 } from "@clerk/nextjs";
 import { Geist, Geist_Mono } from "next/font/google";
+import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -47,7 +48,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 </button>
               </SignUpButton>
             </Show>
-            <Show when="signed-in"><UserButton /></Show>
+            <Show when="signed-in">
+              <Link className={buttonVariants({ variant: "outline" })} href="/dashboard">Dashboard</Link>
+              <UserButton />
+            </Show>
           </div>
           <TooltipProvider>{children}</TooltipProvider>
         </ClerkProvider>
