@@ -1,10 +1,17 @@
 import "dotenv/config";
 
+import type { AxeResults } from "axe-core";
 import { Worker } from "bullmq";
 import { chromium } from "playwright";
 
 import { prisma } from "@/lib/prisma";
 import type { ScanJob } from "@/lib/queue";
+
+type AxeWindow = Window & {
+  axe: {
+    run: () => Promise<AxeResults>;
+  };
+};
 
 const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 const parsedRedisUrl = new URL(redisUrl);
@@ -44,6 +51,29 @@ const worker = new Worker<ScanJob>(
         waitUntil: "domcontentloaded",
       });
       const pageTitle = await page.title();
+      await page.addScriptTag({
+        path: require.resolve("axe-core/axe.min.js"),
+      });
+      const axeResults = await page.evaluate(() =>
+        (window as unknown as AxeWindow).axe.run(),
+      );
+
+      await prisma.issue.deleteMany({
+        where: { scanId: scan.id },
+      });
+      await prisma.issue.createMany({
+        data: axeResults.violations.map((violation) => ({
+          description: violation.description,
+          help: violation.help,
+          helpUrl: violation.helpUrl,
+          html: violation.nodes[0]?.html ?? null,
+          impact: violation.impact,
+          rule: violation.id,
+          scanId: scan.id,
+          tags: violation.tags,
+          targets: violation.nodes.map((node) => node.target),
+        })),
+      });
 
       await prisma.scan.update({
         data: {

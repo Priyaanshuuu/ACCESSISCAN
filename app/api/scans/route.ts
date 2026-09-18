@@ -79,7 +79,12 @@ export async function POST(request: Request) {
       },
       { status: 201 },
     );
-  } catch {
+  } catch (error) {
+    console.error("[api/scans] failed to create scan", {
+      code: error instanceof Error && "code" in error ? error.code : undefined,
+      message: error instanceof Error ? error.message : "Unknown database error",
+    });
+
     return NextResponse.json(
       { error: "Unable to create the scan right now." },
       { status: 503 },

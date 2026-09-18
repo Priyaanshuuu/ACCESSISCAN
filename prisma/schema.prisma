@@ -24,7 +24,26 @@ model Scan {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   completedAt DateTime?
+  issues      Issue[]
 
   @@index([createdAt])
   @@index([status])
+}
+
+model Issue {
+  id          String   @id @default(cuid())
+  scanId      String
+  scan        Scan    @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  rule        String
+  impact      String?
+  description String
+  help        String
+  helpUrl     String
+  html        String?
+  targets     Json
+  tags        Json
+  createdAt   DateTime @default(now())
+
+  @@index([scanId])
+  @@index([impact])
 }
