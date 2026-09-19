@@ -240,6 +240,37 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
         </CardContent>
       </Card>
 
+      <Card className="border-[#d0ddca] bg-white">
+        <CardHeader>
+          <CardTitle className="text-xl text-[#19382d]">Crawled pages</CardTitle>
+          <CardDescription>
+            {scan.pages.length} page{scan.pages.length === 1 ? "" : "s"} analyzed within your plan limits.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Page</TableHead>
+                <TableHead>Depth</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Issues</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {scan.pages.map((page) => (
+                <TableRow key={page.id}>
+                  <TableCell className="max-w-[420px] truncate font-medium text-[#38531f]">{page.url}</TableCell>
+                  <TableCell>{page.depth}</TableCell>
+                  <TableCell><Badge className="bg-[#dff1ba] text-[#38531f]">{page.status}</Badge></TableCell>
+                  <TableCell>{page.issueCount}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <Tabs className="w-full" defaultValue="accessibility">
         <TabsList className="w-full bg-[#e6eee1] sm:w-fit">
           <TabsTrigger value="accessibility">Accessibility</TabsTrigger>
