@@ -38,6 +38,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       completedAt: scan.completedAt,
       durationMs: scan.durationMs,
       finalUrl: scan.finalUrl,
+      failureReason: scan.failureReason,
       httpStatus: scan.httpStatus,
       id: scan.id,
       issues: scan.issues,

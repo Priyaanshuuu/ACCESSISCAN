@@ -183,6 +183,7 @@ const worker = new Worker<ScanJob>(
   {
     connection: workerConnection,
     concurrency: 1,
+    lockDuration: 300_000,
   },
 );
 
@@ -215,7 +216,10 @@ worker.on("failed", async (job, error) => {
   console.error(`[scan-worker] failed job ${job.id}: ${error.message}`);
 
   await prisma.scan.updateMany({
-    data: { status: "FAILED" },
+    data: {
+      failureReason: error.message.slice(0, 1000),
+      status: "FAILED",
+    },
     where: { id: job.data.scanId },
   });
 
@@ -235,6 +239,19 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 console.log("[scan-worker] listening on the scan queue");
+
+void prisma.scan.updateMany({
+  data: {
+    failureReason: "Worker timeout or restart interrupted this scan.",
+    status: "FAILED",
+  },
+  where: {
+    status: "RUNNING",
+    updatedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) },
+  },
+}).catch((error) => {
+  console.error("[scan-worker] failed to reconcile stale scans", error);
+});
 
 async function runLighthouse(url: string) {
   const lighthouseCli = require.resolve("lighthouse/cli/index.js");

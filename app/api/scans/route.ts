@@ -97,7 +97,7 @@ export async function POST(request: Request) {
         identity,
         scanId: scan.id,
         url: scan.url,
-      });
+      }, { timeout: 300_000 });
     } catch {
       await releaseScanSlot(identity);
       await prisma.scan.update({

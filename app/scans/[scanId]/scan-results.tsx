@@ -55,6 +55,7 @@ type ScanData = {
   bestPracticesScore: number | null;
   durationMs: number | null;
   finalUrl: string | null;
+  failureReason: string | null;
   httpStatus: number | null;
   id: string;
   issues: ScanIssue[];
@@ -194,7 +195,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
     return (
       <Alert className="w-full max-w-2xl border-[#e7b9b0] bg-[#fff1ee] text-[#8b3023]" variant="destructive">
         <AlertTitle>The scan failed</AlertTitle>
-        <AlertDescription>We could not finish scanning this website. Please try again.</AlertDescription>
+        <AlertDescription>{scan.failureReason || "We could not finish scanning this website. Please try again."}</AlertDescription>
       </Alert>
     );
   }
