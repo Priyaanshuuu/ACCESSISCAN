@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Show, SignInButton } from "@clerk/nextjs";
@@ -19,16 +19,11 @@ function isValidWebsiteUrl(value: string) {
 
 export default function Home() {
   const searchParams = useSearchParams();
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(() => searchParams.get("url") ?? "");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedUrl, setSubmittedUrl] = useState("");
   const [scanId, setScanId] = useState("");
-
-  useEffect(() => {
-    const savedUrl = searchParams.get("url");
-    if (savedUrl) setUrl(savedUrl);
-  }, [searchParams]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -79,10 +74,10 @@ export default function Home() {
     <main className="min-h-screen overflow-hidden bg-[#f5f7f2] text-[#19251f]">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-6 sm:px-10 lg:px-14">
         <header className="flex items-center justify-between border-b border-[#d7dfd5] pb-5">
-          <a className="flex items-center gap-3 text-sm font-semibold tracking-[0.16em] text-[#19382d]" href="/">
+          <Link className="flex items-center gap-3 text-sm font-semibold tracking-[0.16em] text-[#19382d]" href="/">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#d8f36a] text-lg font-bold tracking-normal text-[#19382d]">A</span>
             ACCESSISCAN
-          </a>
+          </Link>
           <span className="hidden text-xs font-medium uppercase tracking-[0.18em] text-[#718078] sm:block">Website intelligence</span>
         </header>
 

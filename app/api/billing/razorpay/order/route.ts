@@ -16,8 +16,9 @@ export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   const body = (await request.json()) as { plan?: keyof typeof plans };
-  const selectedPlan = body.plan && plans[body.plan];
-  if (!selectedPlan) return NextResponse.json({ error: "A valid paid plan is required." }, { status: 400 });
+  if (!body.plan) return NextResponse.json({ error: "A valid paid plan is required." }, { status: 400 });
+  const selectedPlanKey = body.plan;
+  const selectedPlan = plans[selectedPlanKey];
 
   const databaseUser = await prisma.user.upsert({
     create: { clerkId: user.id, email: user.emailAddresses[0]?.emailAddress ?? null },
@@ -27,11 +28,11 @@ export async function POST(request: Request) {
   const order = await razorpay.orders.create({
     amount: selectedPlan.amountPaise,
     currency: "INR",
-    notes: { plan: body.plan, userId: databaseUser.id },
+    notes: { plan: selectedPlanKey, userId: databaseUser.id },
     receipt: `accessiscan_${databaseUser.id}_${Date.now()}`,
-  });
+  }) as unknown as { id: string };
   const payment = await prisma.payment.create({
-    data: { amountPaise: selectedPlan.amountPaise, plan: body.plan, providerOrderId: order.id, userId: databaseUser.id },
+    data: { amountPaise: selectedPlan.amountPaise, plan: selectedPlanKey, providerOrderId: order.id, userId: databaseUser.id },
   });
 
   return NextResponse.json({ amountPaise: selectedPlan.amountPaise, currency: "INR", keyId: process.env.RAZORPAY_KEY_ID, orderId: order.id, paymentId: payment.id, planName: selectedPlan.name }, { status: 201 });

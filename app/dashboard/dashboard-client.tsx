@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -72,7 +71,10 @@ export function DashboardClient() {
   }
 
   useEffect(() => {
-    void loadDashboard().catch((requestError) => setError(requestError instanceof Error ? requestError.message : "Unable to load dashboard."));
+    const timer = setTimeout(() => {
+      void loadDashboard().catch((requestError) => setError(requestError instanceof Error ? requestError.message : "Unable to load dashboard."));
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const allScans = useMemo(() => sites.flatMap((site) => site.scans), [sites]);

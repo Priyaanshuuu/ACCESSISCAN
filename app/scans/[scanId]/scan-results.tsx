@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
@@ -53,9 +54,13 @@ type ScanIssue = {
 
 type ScanPage = {
   depth: number;
+  hasHorizontalOverflow: boolean;
+  hasViewportMeta: boolean;
   id: string;
   issueCount: number;
+  mobileIssueCount: number;
   status: string;
+  touchTargetCount: number;
   url: string;
 };
 
@@ -90,10 +95,6 @@ const impactStyles: Record<string, string> = {
   moderate: "bg-[#fff2c9] text-[#765d0b]",
   minor: "bg-[#e5edf5] text-[#385773]",
 };
-
-function formatImpact(impact: string | null) {
-  return impact ? impact.charAt(0).toUpperCase() + impact.slice(1) : "Needs review";
-}
 
 function formatSeverity(severity: string) {
   return severity.charAt(0).toUpperCase() + severity.slice(1);
@@ -209,11 +210,6 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
     );
   }
 
-  const impactCounts = scan.issues.reduce<Record<string, number>>((counts, issue) => {
-    const impact = issue.impact || "unassigned";
-    counts[impact] = (counts[impact] || 0) + 1;
-    return counts;
-  }, {});
   const metrics = getRecord(scan.lighthouseMetrics);
   const audits = getRecord(scan.lighthouseAudits);
   const seoAudits = getRecord(audits.seo);
@@ -254,7 +250,9 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                 <TableHead>Page</TableHead>
                 <TableHead>Depth</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Issues</TableHead>
+                <TableHead>Desktop</TableHead>
+                <TableHead>Mobile</TableHead>
+                <TableHead>Touch targets</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,6 +262,8 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                   <TableCell>{page.depth}</TableCell>
                   <TableCell><Badge className="bg-[#dff1ba] text-[#38531f]">{page.status}</Badge></TableCell>
                   <TableCell>{page.issueCount}</TableCell>
+                  <TableCell>{page.mobileIssueCount}</TableCell>
+                  <TableCell>{page.touchTargetCount}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -388,7 +388,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
         </TabsContent>
       </Tabs>
 
-      <a className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} href="/">Scan another website</a>
+      <Link className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} href="/">Scan another website</Link>
       {scan.status === "completed" && (
         <a
           className={buttonVariants({ variant: "outline", className: "ml-2" })}

@@ -46,7 +46,7 @@ export async function GET(request: Request, { params }: Props) {
 
   document.end();
   const buffer = await completed;
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Disposition": `attachment; filename="accessiscan-${scan.id}.pdf"`,
       "Content-Type": "application/pdf",

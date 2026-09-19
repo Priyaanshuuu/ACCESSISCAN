@@ -37,9 +37,6 @@ export async function POST(request: Request) {
     where: { userId_siteId: { siteId: site.id, userId: site.userId } },
   });
 
-  await scheduleQueue.add("scheduled-scan", { scheduleId: schedule.id }, {
-    jobId: scheduleJobId(schedule.id),
-    repeat: { pattern: body.frequency === "DAILY" ? "0 9 * * *" : "0 9 * * 1" },
-  });
+  await scheduleQueue.add("scheduled-scan", { scheduleId: schedule.id }, { jobId: scheduleJobId(schedule.id) });
   return NextResponse.json({ schedule }, { status: 201 });
 }

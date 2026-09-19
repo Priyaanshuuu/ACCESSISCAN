@@ -181,6 +181,10 @@ model ScanPage {
   depth      Int
   status     String
   issueCount Int      @default(0)
+  mobileIssueCount Int @default(0)
+  touchTargetCount Int @default(0)
+  hasHorizontalOverflow Boolean @default(false)
+  hasViewportMeta Boolean @default(false)
   createdAt  DateTime @default(now())
 
   @@unique([scanId, url])

@@ -136,9 +136,33 @@ const worker = new Worker<ScanJob>(
         const axeResults = await page.evaluate(() =>
           (window as unknown as AxeWindow).axe.run(),
         );
+        await page.setViewportSize({ height: 844, width: 390 });
+        const mobileResults = await page.evaluate(async () => {
+          const axe = (window as unknown as AxeWindow).axe;
+          const result = await axe.run();
+          const viewport = document.querySelector('meta[name="viewport"]') !== null;
+          const horizontalOverflow = document.documentElement.scrollWidth > window.innerWidth + 1;
+          const smallTargets = Array.from(document.querySelectorAll("a, button, input, select, textarea, [role=button]"))
+            .filter((element) => {
+              const rect = element.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0 && (rect.width < 44 || rect.height < 44);
+            }).length;
+          return { horizontalOverflow, result, smallTargets, viewport };
+        });
+        await page.setViewportSize({ height: 900, width: 1440 });
         allViolations.push(...axeResults.violations);
         await prisma.scanPage.create({
-          data: { depth: next.depth, issueCount: axeResults.violations.length, scanId: scan.id, status: "COMPLETED", url: pageUrl },
+          data: {
+            depth: next.depth,
+            hasHorizontalOverflow: mobileResults.horizontalOverflow,
+            hasViewportMeta: mobileResults.viewport,
+            issueCount: axeResults.violations.length,
+            mobileIssueCount: mobileResults.result.violations.length,
+            scanId: scan.id,
+            status: "COMPLETED",
+            touchTargetCount: mobileResults.smallTargets,
+            url: pageUrl,
+          },
         });
         await prisma.issue.createMany({
           data: axeResults.violations.map((violation) => ({
@@ -261,9 +285,11 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
     });
     await scanQueue.add("scheduled-scan", {
       identity: `user:${schedule.userId}`,
+      maxDepth: schedule.user.plan === "FREE" ? 0 : schedule.user.plan === "INDIE" ? 2 : schedule.user.plan === "BUSINESS" ? 3 : 5,
+      maxPages: schedule.user.plan === "FREE" ? 1 : schedule.user.plan === "INDIE" ? 10 : schedule.user.plan === "BUSINESS" ? 50 : 250,
       scanId: scan.id,
       url: scan.url,
-    }, { timeout: 300_000 });
+    });
 
     const nextRunAt = new Date(schedule.nextRunAt);
     nextRunAt.setDate(nextRunAt.getDate() + (schedule.frequency === "DAILY" ? 1 : 7));
