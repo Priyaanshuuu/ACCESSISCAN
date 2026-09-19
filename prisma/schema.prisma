@@ -18,6 +18,19 @@ enum ScheduleFrequency {
   WEEKLY
 }
 
+enum UserPlan {
+  FREE
+  INDIE
+  BUSINESS
+  AGENCY
+}
+
+enum PaymentStatus {
+  CREATED
+  PAID
+  FAILED
+}
+
 model Scan {
   id          String     @id
   url         String
@@ -59,6 +72,39 @@ model User {
   sites     Site[]
   schedules ScheduledScan[]
   notificationPreferences NotificationPreference?
+  usagePeriods UsagePeriod[]
+  plan      UserPlan @default(FREE)
+  payments  Payment[]
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String        @default("razorpay")
+  providerOrderId   String        @unique
+  providerPaymentId String?       @unique
+  plan              UserPlan
+  amountPaise       Int
+  currency          String        @default("INR")
+  status            PaymentStatus @default(CREATED)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([userId, status])
+}
+
+model UsagePeriod {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  period    String
+  scanCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, period])
+  @@index([userId])
 }
 
 model Site {

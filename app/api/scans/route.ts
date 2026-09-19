@@ -76,6 +76,14 @@ export async function POST(request: Request) {
           where: { clerkId: user.id },
         })
       : null;
+    if (databaseUser) {
+      const period = new Date().toISOString().slice(0, 7);
+      await prisma.usagePeriod.upsert({
+        create: { period, scanCount: 1, userId: databaseUser.id },
+        update: { scanCount: { increment: 1 } },
+        where: { userId_period: { period, userId: databaseUser.id } },
+      });
+    }
     const site = databaseUser
       ? await prisma.site.upsert({
           create: { url: safeUrl, userId: databaseUser.id },

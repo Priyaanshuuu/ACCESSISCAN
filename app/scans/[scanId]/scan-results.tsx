@@ -348,6 +348,14 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
       </Tabs>
 
       <a className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} href="/">Scan another website</a>
+      {scan.status === "completed" && (
+        <a
+          className={buttonVariants({ variant: "outline", className: "ml-2" })}
+          href={`/api/reports/${scan.id}`}
+        >
+          Download PDF report
+        </a>
+      )}
     </div>
   );
 }
