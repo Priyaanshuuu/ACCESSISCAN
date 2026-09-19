@@ -24,5 +24,5 @@ export async function GET() {
     where: { clerkId: userId },
   });
 
-  return NextResponse.json({ sites: user?.sites ?? [] });
+  return NextResponse.json({ plan: user?.plan ?? "FREE", sites: user?.sites ?? [] });
 }

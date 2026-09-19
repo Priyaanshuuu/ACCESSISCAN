@@ -7,9 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { razorpay } from "@/lib/razorpay";
 
 const plans = {
-  INDIE: { amountPaise: 90000, name: "Indie" },
-  BUSINESS: { amountPaise: 290000, name: "Business" },
-  AGENCY: { amountPaise: 990000, name: "Agency" },
+  INDIE: { amountPaise: 20000, name: "Indie" },
+  BUSINESS: { amountPaise: 150000, name: "Business" },
+  AGENCY: { amountPaise: 500000, name: "Agency" },
 } as const;
 
 export async function POST(request: Request) {

@@ -14,6 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 type Scan = {
   createdAt: string;
@@ -28,6 +30,13 @@ type Scan = {
 
 type Site = { id: string; name: string | null; scans: Scan[]; url: string };
 type Schedule = { enabled: boolean; frequency: "DAILY" | "WEEKLY"; id: string; siteId: string; site: Site; nextRunAt: string };
+type Plan = "FREE" | "INDIE" | "BUSINESS" | "AGENCY";
+
+declare global {
+  interface Window {
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+  }
+}
 
 const chartConfig: ChartConfig = {
   score: { label: "Overall score", color: "#688227" },
@@ -43,12 +52,17 @@ export function DashboardClient() {
   const [siteToDelete, setSiteToDelete] = useState<Site | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [emailEnabled, setEmailEnabled] = useState(true);
+  const [plan, setPlan] = useState<Plan>("FREE");
+  const [billingOpen, setBillingOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<Exclude<Plan, "FREE">>("INDIE");
+  const [billingError, setBillingError] = useState("");
 
   async function loadDashboard() {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
-    const data = (await response.json()) as { error?: string; sites?: Site[] };
+    const data = (await response.json()) as { error?: string; plan?: Plan; sites?: Site[] };
     if (!response.ok) throw new Error(data.error || "Unable to load dashboard.");
     setSites(data.sites ?? []);
+    setPlan(data.plan ?? "FREE");
     const schedulesResponse = await fetch("/api/schedules", { cache: "no-store" });
     const schedulesData = (await schedulesResponse.json()) as { schedules?: Schedule[] };
     setSchedules(schedulesData.schedules ?? []);
@@ -110,6 +124,49 @@ export function DashboardClient() {
     });
   }
 
+  async function startPayment() {
+    setBillingError("");
+    const response = await fetch("/api/billing/razorpay/order", {
+      body: JSON.stringify({ plan: selectedPlan }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    const order = (await response.json()) as { error?: string; amountPaise?: number; currency?: string; keyId?: string; orderId?: string };
+    if (!response.ok || !order.keyId || !order.orderId) {
+      setBillingError(order.error || "Unable to start payment.");
+      return;
+    }
+    if (!window.Razorpay) {
+      setBillingError("Razorpay checkout is still loading. Please try again.");
+      return;
+    }
+
+    const checkout = new window.Razorpay({
+      amount: order.amountPaise,
+      currency: order.currency,
+      description: `${selectedPlan} plan subscription`,
+      key: order.keyId,
+      name: "AccessiScan",
+      order_id: order.orderId,
+      handler: async (payment: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+        const verification = await fetch("/api/billing/razorpay/verify", {
+          body: JSON.stringify({ orderId: payment.razorpay_order_id, paymentId: payment.razorpay_payment_id, signature: payment.razorpay_signature }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        if (verification.ok) {
+          setPlan(selectedPlan);
+          setBillingOpen(false);
+        } else {
+          setBillingError("Payment completed but verification failed. Please contact support.");
+        }
+      },
+      modal: { ondismiss: () => setBillingError("Payment was cancelled.") },
+      theme: { color: "#19382d" },
+    });
+    checkout.open();
+  }
+
   if (error) {
     return <Alert className="m-8 border-[#e7b9b0] bg-[#fff1ee] text-[#8b3023]" variant="destructive"><AlertTitle>Dashboard unavailable</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>;
   }
@@ -119,7 +176,7 @@ export function DashboardClient() {
       <div className="mx-auto max-w-7xl space-y-8">
         <header className="flex flex-col gap-4 border-b border-[#d7dfd5] pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#688227]">Your workspace</p><h1 className="mt-2 text-4xl font-semibold tracking-[-0.05em] text-[#19382d]">Site dashboard</h1><p className="mt-2 text-[#68776d]">Monitor your websites and keep improvements moving.</p></div>
-          <Link href="/" className="inline-flex h-9 items-center justify-center rounded-lg bg-[#19382d] px-4 text-sm font-medium text-white hover:bg-[#285342]">Scan a website</Link>
+          <div className="flex gap-3"><Button className="bg-[#19382d] text-white hover:bg-[#285342]" onClick={() => setBillingOpen(true)} type="button">{plan === "FREE" ? "Upgrade plan" : `${plan} plan`}</Button><Link href="/" className="inline-flex h-9 items-center justify-center rounded-lg bg-[#19382d] px-4 text-sm font-medium text-white hover:bg-[#285342]">Scan a website</Link></div>
         </header>
 
         <section className="grid gap-5 lg:grid-cols-[1.4fr_0.6fr]">
@@ -134,6 +191,8 @@ export function DashboardClient() {
         <section><Card className="border-[#d0ddca] bg-white"><CardHeader><CardTitle className="text-xl text-[#19382d]">Recent scans</CardTitle><CardDescription>Compare your latest results at a glance.</CardDescription></CardHeader><CardContent><Table><TableHeader><TableRow><TableHead>Website</TableHead><TableHead>Date</TableHead><TableHead>Status</TableHead><TableHead>Score</TableHead><TableHead /></TableRow></TableHeader><TableBody>{allScans.slice(0, 20).map((scan) => <TableRow key={scan.id}><TableCell className="max-w-[240px] truncate font-medium text-[#38531f]">{scan.url}</TableCell><TableCell>{formatDate(scan.createdAt)}</TableCell><TableCell><Badge className={scan.status === "completed" ? "bg-[#dff1ba] text-[#38531f]" : "bg-[#eef1ed] text-[#5d6b62]"}>{scan.status}</Badge></TableCell><TableCell>{scan.overallScore ?? "-"}</TableCell><TableCell className="space-x-3 text-right"><Link className="text-xs font-semibold text-[#688227] underline underline-offset-4" href={`/scans/${scan.id}?url=${encodeURIComponent(scan.url)}`}>View</Link>{scan.status === "completed" && <a className="text-xs font-semibold text-[#688227] underline underline-offset-4" href={`/api/reports/${scan.id}`}>PDF</a>}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card></section>
         <section><Card className="border-[#d0ddca] bg-white"><CardHeader><CardTitle className="text-xl text-[#19382d]">Scheduled scans</CardTitle><CardDescription>Keep an eye on changes with daily or weekly checks.</CardDescription></CardHeader><CardContent className="space-y-3">{sites.map((site) => { const schedule = schedules.find((item) => item.siteId === site.id); return <div className="flex flex-col gap-3 rounded-lg border border-[#e1e8df] p-4 sm:flex-row sm:items-center sm:justify-between" key={site.id}><div className="min-w-0"><p className="truncate font-medium text-[#19382d]">{site.name || site.url}</p><p className="text-xs text-[#718078]">{schedule?.enabled ? `Next run ${formatDate(schedule.nextRunAt)}` : "Monitoring is off"}</p></div><div className="flex items-center gap-3"><Select value={schedule?.frequency || "WEEKLY"} onValueChange={(value) => void saveSchedule(site.id, value as "DAILY" | "WEEKLY")}><SelectTrigger className="w-28"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="DAILY">Daily</SelectItem><SelectItem value="WEEKLY">Weekly</SelectItem></SelectContent></Select>{schedule && <Switch checked={schedule.enabled} onCheckedChange={(checked) => void toggleSchedule(schedule, checked)} />}</div></div>; })}<div className="flex items-center justify-between border-t border-[#e1e8df] pt-4"><span className="text-sm text-[#5d6b62]">Email scan reports</span><Switch checked={emailEnabled} onCheckedChange={(checked) => void toggleEmail(checked)} /></div></CardContent></Card></section>
       </div>
+      <Dialog open={billingOpen} onOpenChange={setBillingOpen}><DialogContent><DialogHeader><DialogTitle>Choose an AccessiScan plan</DialogTitle><DialogDescription>Pay securely in INR with Razorpay.</DialogDescription></DialogHeader><RadioGroup className="mt-4" onValueChange={(value) => setSelectedPlan(value as Exclude<Plan, "FREE">)} value={selectedPlan}><label className="flex cursor-pointer items-center gap-3 rounded-lg border p-3"><RadioGroupItem value="INDIE" /><span><strong>Indie</strong><span className="ml-2 text-sm text-muted-foreground">₹200/month</span></span></label><label className="flex cursor-pointer items-center gap-3 rounded-lg border p-3"><RadioGroupItem value="BUSINESS" /><span><strong>Business</strong><span className="ml-2 text-sm text-muted-foreground">₹1,500/month</span></span></label><label className="flex cursor-pointer items-center gap-3 rounded-lg border p-3"><RadioGroupItem value="AGENCY" /><span><strong>Agency</strong><span className="ml-2 text-sm text-muted-foreground">₹5,000/month</span></span></label></RadioGroup>{billingError && <Alert className="mt-4 border-[#e7b9b0] bg-[#fff1ee] text-[#8b3023]" variant="destructive"><AlertDescription>{billingError}</AlertDescription></Alert>}<Button className="mt-5 w-full bg-[#19382d] text-white hover:bg-[#285342]" onClick={() => void startPayment()} type="button">Continue to Razorpay</Button></DialogContent></Dialog>
+      <script async src="https://checkout.razorpay.com/v1/checkout.js" />
       <AlertDialog open={Boolean(siteToDelete)} onOpenChange={(open) => !open && setSiteToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete saved site?</AlertDialogTitle><AlertDialogDescription>This removes the site and its scan history permanently.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction className="bg-[#8b3023] text-white hover:bg-[#6f241b]" onClick={() => void deleteSite()}>Delete site</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </main>
   );
