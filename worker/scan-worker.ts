@@ -11,6 +11,7 @@ import { Resend } from "resend";
 
 import { prisma } from "@/lib/prisma";
 import { scanQueue, type ScanJob } from "@/lib/queue";
+import { decryptBrowserState } from "@/lib/browser-state-crypto";
 import { releaseScanSlot } from "@/lib/rate-limit";
 import type { ScheduledScanJob } from "@/lib/schedule-queue";
 import { assertPublicUrl } from "@/lib/url-safety";
@@ -89,9 +90,18 @@ const worker = new Worker<ScanJob>(
 
     const startedAt = Date.now();
     const browser = await chromium.launch({ headless: true });
+    const browserState = job.data.browserStateId
+      ? await prisma.browserState.findUnique({ where: { id: job.data.browserStateId } })
+      : null;
+    if (browserState?.expiresAt && browserState.expiresAt < new Date()) {
+      throw new Error("The authenticated browser session has expired.");
+    }
 
     try {
-      const page = await browser.newPage();
+      const context = await browser.newContext({
+        storageState: browserState ? decryptBrowserState(browserState.ciphertext) : undefined,
+      });
+      const page = await context.newPage();
       await page.route("**/*", async (route) => {
         try {
           const requestUrl = new URL(route.request().url());

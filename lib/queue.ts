@@ -10,6 +10,7 @@ export const redisConnection = {
 };
 
 export type ScanJob = {
+  browserStateId?: string;
   identity: string;
   maxDepth: number;
   maxPages: number;

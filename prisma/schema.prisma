@@ -58,6 +58,8 @@ model Scan {
   pages       ScanPage[]
   maxPages    Int        @default(1)
   maxDepth    Int        @default(0)
+  browserStateId String?
+  browserState   BrowserState? @relation(fields: [browserStateId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([status])
@@ -78,6 +80,21 @@ model User {
   usagePeriods UsagePeriod[]
   plan      UserPlan @default(FREE)
   payments  Payment[]
+  browserStates BrowserState[]
+}
+
+model BrowserState {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label      String
+  ciphertext String
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  scans      Scan[]
+
+  @@index([userId])
 }
 
 model Payment {

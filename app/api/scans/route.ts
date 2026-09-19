@@ -51,6 +51,10 @@ export async function POST(request: Request) {
     typeof body === "object" && body !== null && "url" in body
       ? body.url
       : undefined;
+  const browserStateId =
+    typeof body === "object" && body !== null && "browserStateId" in body && typeof body.browserStateId === "string"
+      ? body.browserStateId
+      : undefined;
 
   if (typeof url !== "string" || url.trim().length === 0) {
     return NextResponse.json(
@@ -77,6 +81,13 @@ export async function POST(request: Request) {
           where: { clerkId: user.id },
         })
       : null;
+    const browserState = browserStateId && databaseUser
+      ? await prisma.browserState.findFirst({ where: { id: browserStateId, userId: databaseUser.id } })
+      : null;
+    if (browserStateId && !browserState) {
+      await releaseScanSlot(identity);
+      return NextResponse.json({ error: "Browser session not found." }, { status: 404 });
+    }
     const limits = planLimits[databaseUser?.plan ?? "FREE"];
     if (databaseUser) {
       const period = new Date().toISOString().slice(0, 7);
@@ -101,6 +112,7 @@ export async function POST(request: Request) {
         siteId: site?.id,
         maxDepth: limits.maxDepth,
         maxPages: limits.maxPages,
+        browserStateId: browserState?.id,
       },
     });
 
@@ -109,6 +121,7 @@ export async function POST(request: Request) {
         identity,
         maxDepth: scan.maxDepth,
         maxPages: scan.maxPages,
+        browserStateId: scan.browserStateId ?? undefined,
         scanId: scan.id,
         url: scan.url,
       });

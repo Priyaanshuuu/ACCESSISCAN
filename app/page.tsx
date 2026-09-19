@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Show, SignInButton } from "@clerk/nextjs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function isValidWebsiteUrl(value: string) {
   try {
@@ -24,6 +25,14 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedUrl, setSubmittedUrl] = useState("");
   const [scanId, setScanId] = useState("");
+  const [browserStates, setBrowserStates] = useState<{ id: string; label: string; expiresAt: string | null }[]>([]);
+  const [browserStateId, setBrowserStateId] = useState("none");
+
+  useEffect(() => {
+    void fetch("/api/browser-states", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : { states: [] })
+      .then((data: { states?: typeof browserStates }) => setBrowserStates(data.states ?? []));
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,7 +52,10 @@ export default function Home() {
 
     try {
       const response = await fetch("/api/scans", {
-        body: JSON.stringify({ url: trimmedUrl }),
+        body: JSON.stringify({
+          browserStateId: browserStateId === "none" ? undefined : browserStateId,
+          url: trimmedUrl,
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -126,6 +138,18 @@ export default function Home() {
                   {isSubmitting ? "Preparing..." : "Scan website"}
                 </Button>
               </div>
+              {browserStates.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <label className="block text-sm font-semibold text-[#19382d]" htmlFor="browser-state">Authenticated session</label>
+                  <Select value={browserStateId} onValueChange={setBrowserStateId}>
+                    <SelectTrigger className="w-full bg-white" id="browser-state"><SelectValue placeholder="Scan as public visitor" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Public visitor</SelectItem>
+                      {browserStates.map((state) => <SelectItem key={state.id} value={state.id}>{state.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {error ? (
                 <Alert className="mt-3 border-[#e7b9b0] bg-[#fff1ee] text-[#8b3023]" id="url-error" variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
