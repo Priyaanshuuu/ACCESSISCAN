@@ -7,6 +7,9 @@ import { encryptBrowserState } from "@/lib/browser-state-crypto";
 export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  await prisma.browserState.deleteMany({
+    where: { expiresAt: { lt: new Date() }, user: { clerkId: user.id } },
+  });
   const states = await prisma.browserState.findMany({
     select: { createdAt: true, expiresAt: true, id: true, label: true },
     where: { user: { clerkId: user.id } },
@@ -23,6 +26,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "A label and Playwright storage state are required." }, { status: 400 });
   }
 
+  if (!validatePlaywrightStorageState(body.state)) {
+    return NextResponse.json({
+      error: "Invalid session file. Upload a Playwright storage-state JSON with cookies and/or origins.",
+    }, { status: 400 });
+  }
+
   const databaseUser = await prisma.user.findUnique({ where: { clerkId: user.id } });
   if (!databaseUser) return NextResponse.json({ error: "User profile is not ready." }, { status: 409 });
   const state = await prisma.browserState.create({
@@ -36,3 +45,5 @@ export async function POST(request: Request) {
   });
   return NextResponse.json({ state }, { status: 201 });
 }
+
+import { validatePlaywrightStorageState } from "@/lib/browser-state-crypto";
