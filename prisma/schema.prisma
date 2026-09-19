@@ -13,6 +13,11 @@ enum ScanStatus {
   FAILED
 }
 
+enum ScheduleFrequency {
+  DAILY
+  WEEKLY
+}
+
 model Scan {
   id          String     @id
   url         String
@@ -52,6 +57,8 @@ model User {
   updatedAt DateTime @updatedAt
   scans     Scan[]
   sites     Site[]
+  schedules ScheduledScan[]
+  notificationPreferences NotificationPreference?
 }
 
 model Site {
@@ -63,9 +70,37 @@ model Site {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   scans     Scan[]
+  schedules ScheduledScan[]
 
   @@unique([userId, url])
   @@index([userId])
+}
+
+model ScheduledScan {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  siteId    String
+  site      Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  frequency ScheduleFrequency
+  enabled   Boolean           @default(true)
+  nextRunAt DateTime
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([enabled, nextRunAt])
+  @@index([userId])
+  @@unique([userId, siteId])
+}
+
+model NotificationPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailEnabled       Boolean  @default(true)
+  notifyOnRegression Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model Issue {

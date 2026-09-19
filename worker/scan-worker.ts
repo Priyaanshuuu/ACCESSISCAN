@@ -1,14 +1,17 @@
 import "dotenv/config";
 
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { AxeResults } from "axe-core";
 import { Worker } from "bullmq";
 import { chromium } from "playwright";
+import { Resend } from "resend";
 
 import { prisma } from "@/lib/prisma";
-import type { ScanJob } from "@/lib/queue";
+import { scanQueue, type ScanJob } from "@/lib/queue";
 import { releaseScanSlot } from "@/lib/rate-limit";
+import type { ScheduledScanJob } from "@/lib/schedule-queue";
 import { assertPublicUrl } from "@/lib/url-safety";
 
 type AxeWindow = Window & {
@@ -190,7 +193,59 @@ const worker = new Worker<ScanJob>(
 worker.on("completed", (job) => {
   console.log(`[scan-worker] completed job ${job.id}`);
   void releaseScanSlot(job.data.identity);
+  void sendCompletionEmail(job.data.scanId);
 });
+
+const scheduledWorker = new Worker<ScheduledScanJob>(
+  "scheduled-scan",
+  async (job) => {
+    const schedule = await prisma.scheduledScan.findUnique({
+      include: { site: true },
+      where: { id: job.data.scheduleId },
+    });
+    if (!schedule || !schedule.enabled) return;
+
+    const scan = await prisma.scan.create({
+      data: {
+        id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+        siteId: schedule.siteId,
+        url: schedule.site.url,
+        userId: schedule.userId,
+      },
+    });
+    await scanQueue.add("scheduled-scan", {
+      identity: `user:${schedule.userId}`,
+      scanId: scan.id,
+      url: scan.url,
+    }, { timeout: 300_000 });
+
+    const nextRunAt = new Date(schedule.nextRunAt);
+    nextRunAt.setDate(nextRunAt.getDate() + (schedule.frequency === "DAILY" ? 1 : 7));
+    await prisma.scheduledScan.update({ data: { nextRunAt }, where: { id: schedule.id } });
+  },
+  { connection: workerConnection, concurrency: 1 },
+);
+
+async function sendCompletionEmail(scanId: string) {
+  const resendKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM_EMAIL;
+  if (!resendKey || !from) return;
+
+  const scan = await prisma.scan.findUnique({
+    include: { user: { include: { notificationPreferences: true } } },
+    where: { id: scanId },
+  });
+  const email = scan?.user?.email;
+  if (!scan || !email || scan.user?.notificationPreferences?.emailEnabled === false) return;
+
+  const resend = new Resend(resendKey);
+  await resend.emails.send({
+    from,
+    to: email,
+    subject: `AccessiScan report: ${scan.url}`,
+    text: `Your scan is complete. Overall score: ${scan.overallScore ?? "unavailable"}. Visit your dashboard to review the findings.`,
+  });
+}
 
 function toScore(value: number | null | undefined) {
   return typeof value === "number" ? Math.round(value * 100) : null;
@@ -231,6 +286,7 @@ worker.on("failed", async (job, error) => {
 async function shutdown(signal: string) {
   console.log(`[scan-worker] received ${signal}, shutting down`);
   await worker.close();
+  await scheduledWorker.close();
   await prisma.$disconnect();
   process.exit(0);
 }
