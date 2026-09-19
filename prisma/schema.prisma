@@ -84,15 +84,18 @@ model User {
 }
 
 model BrowserState {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  label      String
-  ciphertext String
-  expiresAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  scans      Scan[]
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label                 String
+  kind                  String   @default("storage_state")
+  ciphertext            String
+  expiresAt             DateTime?
+  manualNotes           String?
+  requiresManualHandoff Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  scans                 Scan[]
 
   @@index([userId])
 }
