@@ -157,6 +157,7 @@ model Issue {
   scanId      String
   scan        Scan    @relation(fields: [scanId], references: [id], onDelete: Cascade)
   rule        String
+  fingerprint String
   impact      String?
   severity    String   @default("info")
   description String
@@ -167,10 +168,24 @@ model Issue {
   tags        Json
   fix         String?
   recommendation String?
+  occurrenceCount Int      @default(1)
+  firstSeenAt DateTime     @default(now())
+  lastSeenAt  DateTime     @default(now())
+  lifecycle   String       @default("new")
+  confidence  String       @default("medium")
+  confidenceReason String?
+  suppressedAt DateTime?
+  suppressionReason String?
+  reviewStatus String @default("not_reviewed")
+  reviewNotes String?
+  reviewedAt DateTime?
+  reviewedBy String?
   createdAt   DateTime @default(now())
 
   @@index([scanId])
   @@index([impact])
+  @@index([fingerprint])
+  @@index([lifecycle])
 }
 
 model ScanPage {
@@ -185,6 +200,8 @@ model ScanPage {
   touchTargetCount Int @default(0)
   hasHorizontalOverflow Boolean @default(false)
   hasViewportMeta Boolean @default(false)
+  keyboardIssueCount Int @default(0)
+  keyboardFocusableCount Int @default(0)
   createdAt  DateTime @default(now())
 
   @@unique([scanId, url])

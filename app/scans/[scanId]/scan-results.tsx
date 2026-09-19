@@ -40,13 +40,19 @@ import {
 type ScanIssue = {
   description: string;
   fix: string | null;
+  confidence: string;
+  confidenceReason: string | null;
   help: string;
   helpUrl: string;
   html: string | null;
   id: string;
   impact: string | null;
+  lifecycle: string;
+  occurrenceCount: number;
   rule: string;
   recommendation: string | null;
+  reviewNotes: string | null;
+  reviewStatus: string;
   severity: string;
   tags: unknown;
   targets: unknown;
@@ -58,6 +64,8 @@ type ScanPage = {
   hasViewportMeta: boolean;
   id: string;
   issueCount: number;
+  keyboardFocusableCount: number;
+  keyboardIssueCount: number;
   mobileIssueCount: number;
   status: string;
   touchTargetCount: number;
@@ -136,6 +144,8 @@ function ScoreBar({ label, score }: { label: string; score: number | null }) {
 export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
   const [scan, setScan] = useState<ScanData | null>(null);
   const [error, setError] = useState("");
+  const [suppressedIssues, setSuppressedIssues] = useState<Set<string>>(new Set());
+  const [reviewingIssue, setReviewingIssue] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -170,6 +180,31 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
       if (timer) clearTimeout(timer);
     };
   }, [scanId]);
+
+  async function suppressIssue(issueId: string) {
+    const response = await fetch(`/api/issues/${issueId}`, {
+      body: JSON.stringify({ reason: "Marked false positive", suppressed: true }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    });
+    if (response.ok) setSuppressedIssues((current) => new Set(current).add(issueId));
+  }
+
+  async function reviewIssue(issueId: string, status: string) {
+    setReviewingIssue(issueId);
+    const response = await fetch(`/api/issues/${issueId}/review`, {
+      body: JSON.stringify({ status }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    });
+    if (response.ok) {
+      setScan((current) => current ? {
+        ...current,
+        issues: current.issues.map((issue) => issue.id === issueId ? { ...issue, reviewStatus: status } : issue),
+      } : current);
+    }
+    setReviewingIssue(null);
+  }
 
   if (error) {
     return (
@@ -213,6 +248,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
   const metrics = getRecord(scan.lighthouseMetrics);
   const audits = getRecord(scan.lighthouseAudits);
   const seoAudits = getRecord(audits.seo);
+  const reviewedCount = scan.issues.filter((issue) => issue.reviewStatus !== "not_reviewed").length;
 
   return (
     <div className="w-full max-w-3xl space-y-5">
@@ -236,6 +272,13 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
         </CardContent>
       </Card>
 
+      <Alert className="border-[#d9e4d3] bg-[#f7faf4] text-[#38531f]">
+        <AlertTitle>Automated results are advisory</AlertTitle>
+        <AlertDescription>
+          Automated scanning does not establish legal compliance or replace keyboard, screen-reader, user-flow, and professional review. Manual review completed: {reviewedCount}/{scan.issues.length}.
+        </AlertDescription>
+      </Alert>
+
       <Card className="border-[#d0ddca] bg-white">
         <CardHeader>
           <CardTitle className="text-xl text-[#19382d]">Crawled pages</CardTitle>
@@ -253,6 +296,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                 <TableHead>Desktop</TableHead>
                 <TableHead>Mobile</TableHead>
                 <TableHead>Touch targets</TableHead>
+                <TableHead>Keyboard</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -264,6 +308,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                   <TableCell>{page.issueCount}</TableCell>
                   <TableCell>{page.mobileIssueCount}</TableCell>
                   <TableCell>{page.touchTargetCount}</TableCell>
+                  <TableCell>{page.keyboardIssueCount} / {page.keyboardFocusableCount} focusable</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -287,7 +332,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
             <CardContent className="p-6 pt-0 sm:p-8 sm:pt-0">
               {scan.issues.length > 0 && <Separator className="mb-2 bg-[#e1e8df]" />}
               <Accordion>
-            {scan.issues.map((issue) => (
+            {scan.issues.filter((issue) => !suppressedIssues.has(issue.id)).map((issue) => (
               <AccordionItem key={issue.id} value={issue.id}>
                 <AccordionTrigger className="gap-4 py-4 hover:no-underline">
                   <span className="min-w-0 flex-1">
@@ -295,10 +340,16 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                     <span className="mt-1 block font-mono text-xs font-normal text-[#89958c]">{issue.rule}</span>
                   </span>
                   <Badge className={impactStyles[issue.severity] || "bg-[#eef1ed] text-[#5d6b62]"}>{formatSeverity(issue.severity)}</Badge>
+                  <Badge className={issue.lifecycle === "new" ? "bg-[#dff1ba] text-[#38531f]" : "bg-[#eef1ed] text-[#5d6b62]"}>{issue.lifecycle}</Badge>
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-4 pb-4 text-sm text-[#5d6b62]">
                     <p>{issue.description}</p>
+                    <div className="rounded-lg border border-[#e1e8df] bg-[#f7faf4] p-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#688227]">Confidence: {issue.confidence}</p>
+                      <p className="mt-1 text-xs">{issue.confidenceReason || "Manual review is recommended."}</p>
+                    </div>
+                    <p className="text-xs text-[#89958c]">Found on {issue.occurrenceCount} page{issue.occurrenceCount === 1 ? "" : "s"} in this scan.</p>
                     {issue.recommendation && (
                       <div className="rounded-lg border border-[#d9e4d3] bg-[#f7faf4] p-3">
                         <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#688227]">Why it matters</p>
@@ -319,6 +370,21 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                     </div>
                     {issue.html && <pre className="overflow-x-auto rounded-lg bg-[#f4f7f2] p-3 text-xs text-[#38531f]"><code>{issue.html}</code></pre>}
                     <a className="font-semibold text-[#688227] underline underline-offset-4" href={issue.helpUrl} rel="noreferrer" target="_blank">Learn how to fix this issue</a>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-[#e1e8df] pt-3">
+                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#89958c]">Review</span>
+                      {["confirmed", "needs_remediation", "false_positive"].map((status) => (
+                        <button
+                          className={`text-xs font-semibold underline underline-offset-4 ${issue.reviewStatus === status ? "text-[#19382d]" : "text-[#688227]"}`}
+                          disabled={reviewingIssue === issue.id}
+                          key={status}
+                          onClick={() => void reviewIssue(issue.id, status)}
+                          type="button"
+                        >
+                          {status.replace("_", " ")}
+                        </button>
+                      ))}
+                    </div>
+                    <button className="text-xs font-semibold text-[#8b3023] underline underline-offset-4" onClick={() => void suppressIssue(issue.id)} type="button">Mark as false positive</button>
                   </div>
                 </AccordionContent>
               </AccordionItem>

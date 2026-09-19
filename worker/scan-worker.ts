@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { randomUUID } from "node:crypto";
+import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { AxeResults } from "axe-core";
@@ -51,6 +52,8 @@ const fixTemplates: Record<string, { fix: string; recommendation: string }> = {
     recommendation: "A programmatic label helps everyone understand what information the field requires.",
   },
 };
+
+const highConfidenceRules = new Set(["button-name", "document-title", "html-has-lang", "image-alt", "label"]);
 
 const execFileAsync = promisify(execFile);
 
@@ -111,6 +114,7 @@ const worker = new Worker<ScanJob>(
       const pending = [{ depth: 0, url: startUrl.toString() }];
       const visited = new Set<string>();
       const allViolations: AxeResults["violations"] = [];
+      const issueFingerprints = new Map<string, { count: number; violation: AxeResults["violations"][number] }>();
       let firstResponseStatus: number | null = null;
       let firstPageTitle = "";
       let firstPageUrl = startUrl.toString();
@@ -150,6 +154,9 @@ const worker = new Worker<ScanJob>(
           return { horizontalOverflow, result, smallTargets, viewport };
         });
         await page.setViewportSize({ height: 900, width: 1440 });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.focus("body");
+        const keyboardResult = await inspectKeyboardFlow(page);
         allViolations.push(...axeResults.violations);
         await prisma.scanPage.create({
           data: {
@@ -157,6 +164,8 @@ const worker = new Worker<ScanJob>(
             hasHorizontalOverflow: mobileResults.horizontalOverflow,
             hasViewportMeta: mobileResults.viewport,
             issueCount: axeResults.violations.length,
+            keyboardFocusableCount: keyboardResult.focusableCount,
+            keyboardIssueCount: keyboardResult.issueCount,
             mobileIssueCount: mobileResults.result.violations.length,
             scanId: scan.id,
             status: "COMPLETED",
@@ -164,22 +173,11 @@ const worker = new Worker<ScanJob>(
             url: pageUrl,
           },
         });
-        await prisma.issue.createMany({
-          data: axeResults.violations.map((violation) => ({
-            description: violation.description,
-            fix: fixTemplates[violation.id]?.fix ?? "Review the linked guidance and update the affected markup.",
-            help: violation.help,
-            helpUrl: violation.helpUrl,
-            html: violation.nodes[0]?.html ?? null,
-            impact: violation.impact,
-            recommendation: fixTemplates[violation.id]?.recommendation ?? "Fix this issue in the affected component, then scan again to confirm the result.",
-            rule: violation.id,
-            scanId: scan.id,
-            severity: normalizeSeverity(violation.impact),
-            tags: violation.tags,
-            targets: violation.nodes.map((node) => node.target),
-          })),
-        });
+        for (const violation of axeResults.violations) {
+          const fingerprint = issueFingerprint(violation.id, violation.nodes[0]?.target);
+          const existing = issueFingerprints.get(fingerprint);
+          issueFingerprints.set(fingerprint, { count: (existing?.count ?? 0) + 1, violation });
+        }
 
         if (next.depth < job.data.maxDepth && visited.size < job.data.maxPages) {
           const links = await page.locator("a[href]").evaluateAll((elements) =>
@@ -202,6 +200,39 @@ const worker = new Worker<ScanJob>(
       }
 
       const accessibilityScore = calculateAccessibilityScore(allViolations);
+      const previousScan = scan.siteId
+        ? await prisma.scan.findFirst({
+            include: { issues: true },
+            orderBy: { createdAt: "desc" },
+            where: { id: { not: scan.id }, siteId: scan.siteId, status: "COMPLETED" },
+          })
+        : null;
+      const previousFingerprints = new Set(previousScan?.issues.map((issue) => issue.fingerprint));
+      const currentFingerprints = new Set(issueFingerprints.keys());
+      const issueData = [...issueFingerprints.entries()].map(([fingerprint, entry]) => ({
+        description: entry.violation.description,
+            confidence: highConfidenceRules.has(entry.violation.id) ? "high" : "medium",
+            confidenceReason: highConfidenceRules.has(entry.violation.id)
+              ? "A deterministic rule directly identified the missing or invalid markup."
+              : "Automated analysis found a likely issue; manual review is recommended.",
+        fingerprint,
+        firstSeenAt: new Date(),
+        fix: fixTemplates[entry.violation.id]?.fix ?? "Review the linked guidance and update the affected markup.",
+        help: entry.violation.help,
+        helpUrl: entry.violation.helpUrl,
+        html: entry.violation.nodes[0]?.html ?? null,
+        impact: entry.violation.impact,
+        lastSeenAt: new Date(),
+        lifecycle: previousFingerprints.has(fingerprint) ? "ongoing" : "new",
+        occurrenceCount: entry.count,
+        recommendation: fixTemplates[entry.violation.id]?.recommendation ?? "Fix this issue in the affected component, then scan again to confirm the result.",
+        rule: entry.violation.id,
+        scanId: scan.id,
+        severity: normalizeSeverity(entry.violation.impact),
+        tags: entry.violation.tags,
+        targets: entry.violation.nodes.map((node) => node.target),
+      }));
+      await prisma.issue.createMany({ data: issueData });
 
       let lighthouseResult: LighthouseResult | undefined;
       let lighthouseError: string | null = null;
@@ -245,6 +276,15 @@ const worker = new Worker<ScanJob>(
         },
         where: { id: scan.id },
       });
+      if (previousScan) {
+        const resolvedIssues = previousScan.issues.filter((issue) => !currentFingerprints.has(issue.fingerprint));
+        if (resolvedIssues.length) {
+          await prisma.issue.updateMany({
+            data: { lifecycle: "resolved", lastSeenAt: new Date() },
+            where: { id: { in: resolvedIssues.map((issue) => issue.id) } },
+          });
+        }
+      }
     } finally {
       await browser.close();
     }
@@ -424,4 +464,46 @@ function calculateOverallScore(
   return Math.round(
     accessibility * 0.4 + performance * 0.25 + seo * 0.2 + bestPractices * 0.15,
   );
+}
+
+async function inspectKeyboardFlow(page: import("playwright").Page) {
+  const focusableCount = await page.locator(
+    'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+  ).count();
+  const focusOrder: string[] = [];
+  const maxTabs = Math.min(Math.max(focusableCount * 2, 10), 100);
+
+  for (let index = 0; index < maxTabs; index += 1) {
+    await page.keyboard.press("Tab");
+    const active = await page.evaluate(() => {
+      const element = document.activeElement;
+      if (!(element instanceof HTMLElement)) return null;
+      const rect = element.getBoundingClientRect();
+      const styles = window.getComputedStyle(element);
+      return {
+        focusVisible: rect.width > 0 && rect.height > 0 && styles.visibility !== "hidden" && styles.display !== "none",
+        selector: `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}`,
+      };
+    });
+    if (!active) continue;
+    focusOrder.push(active.selector);
+    if (focusOrder.length > focusableCount && focusOrder[focusOrder.length - 1] === focusOrder[0]) break;
+  }
+
+  const invisibleFocusCount = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>(
+    'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+  )).filter((element) => {
+    const rect = element.getBoundingClientRect();
+    const styles = window.getComputedStyle(element);
+    return rect.width === 0 || rect.height === 0 || styles.visibility === "hidden" || styles.display === "none";
+  }).length);
+
+  return {
+    focusableCount,
+    issueCount: invisibleFocusCount + (focusableCount > 0 && new Set(focusOrder).size < Math.min(focusableCount, 100) ? 1 : 0),
+  };
+}
+
+function issueFingerprint(rule: string, target: unknown) {
+  return crypto.createHash("sha256").update(`${rule}:${JSON.stringify(target ?? "")}`).digest("hex");
 }

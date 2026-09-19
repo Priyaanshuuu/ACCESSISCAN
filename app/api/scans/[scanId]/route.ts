@@ -21,6 +21,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
   const scan = await prisma.scan.findUnique({
     include: {
       issues: {
+        where: { suppressedAt: null },
         orderBy: [{ impact: "desc" }, { rule: "asc" }],
       },
       pages: { orderBy: { depth: "asc" } },
