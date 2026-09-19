@@ -11,6 +11,8 @@ export const redisConnection = {
 
 export type ScanJob = {
   identity: string;
+  maxDepth: number;
+  maxPages: number;
   scanId: string;
   url: string;
 };

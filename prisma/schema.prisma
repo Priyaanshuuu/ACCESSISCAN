@@ -55,6 +55,9 @@ model Scan {
   updatedAt   DateTime   @updatedAt
   completedAt DateTime?
   issues      Issue[]
+  pages       ScanPage[]
+  maxPages    Int        @default(1)
+  maxDepth    Int        @default(0)
 
   @@index([createdAt])
   @@index([status])
@@ -168,4 +171,18 @@ model Issue {
 
   @@index([scanId])
   @@index([impact])
+}
+
+model ScanPage {
+  id         String   @id @default(cuid())
+  scanId     String
+  scan       Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  url        String
+  depth      Int
+  status     String
+  issueCount Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([scanId, url])
+  @@index([scanId])
 }

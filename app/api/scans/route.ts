@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { scanQueue } from "@/lib/queue";
 import { consumeScanRateLimit, releaseScanSlot, reserveScanSlot } from "@/lib/rate-limit";
 import { assertPublicUrl } from "@/lib/url-safety";
+import { planLimits } from "@/lib/plan-limits";
 
 export async function POST(request: Request) {
   const user = await currentUser();
@@ -76,6 +77,7 @@ export async function POST(request: Request) {
           where: { clerkId: user.id },
         })
       : null;
+    const limits = planLimits[databaseUser?.plan ?? "FREE"];
     if (databaseUser) {
       const period = new Date().toISOString().slice(0, 7);
       await prisma.usagePeriod.upsert({
@@ -97,12 +99,16 @@ export async function POST(request: Request) {
         url: safeUrl,
         userId: databaseUser?.id,
         siteId: site?.id,
+        maxDepth: limits.maxDepth,
+        maxPages: limits.maxPages,
       },
     });
 
     try {
       await scanQueue.add("scan-website", {
         identity,
+        maxDepth: scan.maxDepth,
+        maxPages: scan.maxPages,
         scanId: scan.id,
         url: scan.url,
       }, { timeout: 300_000 });

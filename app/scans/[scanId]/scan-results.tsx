@@ -51,6 +51,14 @@ type ScanIssue = {
   targets: unknown;
 };
 
+type ScanPage = {
+  depth: number;
+  id: string;
+  issueCount: number;
+  status: string;
+  url: string;
+};
+
 type ScanData = {
   bestPracticesScore: number | null;
   durationMs: number | null;
@@ -59,6 +67,7 @@ type ScanData = {
   httpStatus: number | null;
   id: string;
   issues: ScanIssue[];
+  pages: ScanPage[];
   lighthouseAudits: unknown;
   lighthouseError: string | null;
   lighthouseMetrics: unknown;
@@ -225,6 +234,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
         <CardContent className="grid gap-5 p-6 sm:grid-cols-4 sm:p-8">
           <div><ScoreLabel explanation="Weighted score across accessibility, performance, SEO, and best practices." label="Overall" score={scan.overallScore} /></div>
           <div><ScoreLabel explanation="Total number of automated accessibility findings." label="Issues" score={scan.issues.length} /></div>
+          <div><ScoreLabel explanation="Pages crawled within your plan limits." label="Pages" score={scan.pages.length} /></div>
           <div><p className="text-xs uppercase tracking-[0.16em] text-[#89958c]">HTTP status</p><p className="mt-2 text-sm font-semibold text-[#19382d]">{scan.httpStatus || "-"}</p></div>
           <div><p className="text-xs uppercase tracking-[0.16em] text-[#89958c]">Duration</p><p className="mt-2 text-sm font-semibold text-[#19382d]">{scan.durationMs ? `${(scan.durationMs / 1000).toFixed(1)}s` : "-"}</p></div>
         </CardContent>

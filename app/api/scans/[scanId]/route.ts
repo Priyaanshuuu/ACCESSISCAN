@@ -23,6 +23,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       issues: {
         orderBy: [{ impact: "desc" }, { rule: "asc" }],
       },
+      pages: { orderBy: { depth: "asc" } },
     },
     where: userId
       ? { id: scanId, user: { clerkId: userId } }
@@ -42,6 +43,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       httpStatus: scan.httpStatus,
       id: scan.id,
       issues: scan.issues,
+      pages: scan.pages,
       overallScore: scan.overallScore,
       bestPracticesScore: scan.bestPracticesScore,
       lighthouseAudits: scan.lighthouseAudits,

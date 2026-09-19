@@ -102,43 +102,88 @@ const worker = new Worker<ScanJob>(
           await route.abort("blockedbyclient");
         }
       });
-      const response = await page.goto(job.data.url, {
-        timeout: 30_000,
-        waitUntil: "domcontentloaded",
-      });
-      const pageTitle = await page.title();
-      await page.addScriptTag({
-        path: require.resolve("axe-core/axe.min.js"),
-      });
-      const axeResults = await page.evaluate(() =>
-        (window as unknown as AxeWindow).axe.run(),
-      );
-
       await prisma.issue.deleteMany({
         where: { scanId: scan.id },
       });
-      await prisma.issue.createMany({
-        data: axeResults.violations.map((violation) => ({
-          description: violation.description,
-          fix: fixTemplates[violation.id]?.fix ?? "Review the linked guidance and update the affected markup.",
-          help: violation.help,
-          helpUrl: violation.helpUrl,
-          html: violation.nodes[0]?.html ?? null,
-          impact: violation.impact,
-          recommendation: fixTemplates[violation.id]?.recommendation ?? "Fix this issue in the affected component, then scan again to confirm the result.",
-          rule: violation.id,
-          scanId: scan.id,
-          severity: normalizeSeverity(violation.impact),
-          tags: violation.tags,
-          targets: violation.nodes.map((node) => node.target),
-        })),
-      });
+      await prisma.scanPage.deleteMany({ where: { scanId: scan.id } });
+
+      const startUrl = new URL(job.data.url);
+      const pending = [{ depth: 0, url: startUrl.toString() }];
+      const visited = new Set<string>();
+      const allViolations: AxeResults["violations"] = [];
+      let firstResponseStatus: number | null = null;
+      let firstPageTitle = "";
+      let firstPageUrl = startUrl.toString();
+
+      while (pending.length && visited.size < job.data.maxPages) {
+        const next = pending.shift();
+        if (!next || visited.has(next.url)) continue;
+        visited.add(next.url);
+
+        const response = await page.goto(next.url, {
+          timeout: 30_000,
+          waitUntil: "domcontentloaded",
+        });
+        const pageUrl = page.url();
+        const pageTitle = await page.title();
+        if (visited.size === 1) {
+          firstResponseStatus = response?.status() ?? null;
+          firstPageTitle = pageTitle;
+          firstPageUrl = pageUrl;
+        }
+
+        await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
+        const axeResults = await page.evaluate(() =>
+          (window as unknown as AxeWindow).axe.run(),
+        );
+        allViolations.push(...axeResults.violations);
+        await prisma.scanPage.create({
+          data: { depth: next.depth, issueCount: axeResults.violations.length, scanId: scan.id, status: "COMPLETED", url: pageUrl },
+        });
+        await prisma.issue.createMany({
+          data: axeResults.violations.map((violation) => ({
+            description: violation.description,
+            fix: fixTemplates[violation.id]?.fix ?? "Review the linked guidance and update the affected markup.",
+            help: violation.help,
+            helpUrl: violation.helpUrl,
+            html: violation.nodes[0]?.html ?? null,
+            impact: violation.impact,
+            recommendation: fixTemplates[violation.id]?.recommendation ?? "Fix this issue in the affected component, then scan again to confirm the result.",
+            rule: violation.id,
+            scanId: scan.id,
+            severity: normalizeSeverity(violation.impact),
+            tags: violation.tags,
+            targets: violation.nodes.map((node) => node.target),
+          })),
+        });
+
+        if (next.depth < job.data.maxDepth && visited.size < job.data.maxPages) {
+          const links = await page.locator("a[href]").evaluateAll((elements) =>
+            elements.map((element) => (element as HTMLAnchorElement).href),
+          );
+          for (const link of links) {
+            try {
+              const linkUrl = new URL(link);
+              if (linkUrl.origin === startUrl.origin && ["http:", "https:"].includes(linkUrl.protocol)) {
+                linkUrl.hash = "";
+                if (!visited.has(linkUrl.toString()) && !pending.some((item) => item.url === linkUrl.toString())) {
+                  pending.push({ depth: next.depth + 1, url: linkUrl.toString() });
+                }
+              }
+            } catch {
+              // Ignore malformed links.
+            }
+          }
+        }
+      }
+
+      const accessibilityScore = calculateAccessibilityScore(allViolations);
 
       let lighthouseResult: LighthouseResult | undefined;
       let lighthouseError: string | null = null;
 
       try {
-        lighthouseResult = await runLighthouse(page.url());
+        lighthouseResult = await runLighthouse(firstPageUrl);
       } catch (error) {
         lighthouseError = error instanceof Error
           ? error.message.slice(0, 1000)
@@ -151,15 +196,14 @@ const worker = new Worker<ScanJob>(
       const performanceScore = toScore(categories.performance?.score);
       const seoScore = toScore(categories.seo?.score);
       const bestPracticesScore = toScore(categories["best-practices"]?.score);
-      const accessibilityScore = calculateAccessibilityScore(axeResults.violations);
 
       await prisma.scan.update({
         data: {
           bestPracticesScore,
           completedAt: new Date(),
           durationMs: Date.now() - startedAt,
-          finalUrl: page.url(),
-          httpStatus: response?.status() ?? null,
+          finalUrl: firstPageUrl,
+          httpStatus: firstResponseStatus,
           lighthouseAudits: {
             accessibility: pickAudit(audits, "accessibility", "accessibilityScore"),
             categories: Object.fromEntries(
@@ -169,7 +213,7 @@ const worker = new Worker<ScanJob>(
           },
           lighthouseError,
           lighthouseMetrics: pickAudit(audits, "largest-contentful-paint", "cumulative-layout-shift", "first-contentful-paint", "total-blocking-time"),
-          pageTitle,
+          pageTitle: firstPageTitle,
           overallScore: calculateOverallScore(accessibilityScore, performanceScore, seoScore, bestPracticesScore),
           performanceScore,
           seoScore,
@@ -200,7 +244,7 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
   "scheduled-scan",
   async (job) => {
     const schedule = await prisma.scheduledScan.findUnique({
-      include: { site: true },
+      include: { site: true, user: true },
       where: { id: job.data.scheduleId },
     });
     if (!schedule || !schedule.enabled) return;
@@ -208,6 +252,8 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
     const scan = await prisma.scan.create({
       data: {
         id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+        maxDepth: schedule.user.plan === "FREE" ? 0 : schedule.user.plan === "INDIE" ? 2 : schedule.user.plan === "BUSINESS" ? 3 : 5,
+        maxPages: schedule.user.plan === "FREE" ? 1 : schedule.user.plan === "INDIE" ? 10 : schedule.user.plan === "BUSINESS" ? 50 : 250,
         siteId: schedule.siteId,
         url: schedule.site.url,
         userId: schedule.userId,
