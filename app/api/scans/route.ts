@@ -58,10 +58,20 @@ export async function POST(request: Request) {
   }
 
   let slotReserved = false;
+  let freeScanReservedForUserId: string | null = null;
   async function releaseReservedSlot() {
     if (!slotReserved) return;
     slotReserved = false;
     await releaseScanSlot(identity);
+  }
+  async function releaseFreeScan() {
+    if (!freeScanReservedForUserId) return;
+    const userId = freeScanReservedForUserId;
+    freeScanReservedForUserId = null;
+    await prisma.user.updateMany({
+      data: { freeScanUsed: false },
+      where: { freeScanUsed: true, id: userId, plan: "FREE" },
+    });
   }
 
   try {
@@ -95,6 +105,21 @@ export async function POST(request: Request) {
       );
     }
     slotReserved = true;
+
+    if (databaseUser?.plan === "FREE") {
+      const freeScanReservation = await prisma.user.updateMany({
+        data: { freeScanUsed: true },
+        where: { freeScanUsed: false, id: databaseUser.id, plan: "FREE" },
+      });
+      if (!freeScanReservation.count) {
+        await releaseReservedSlot();
+        return NextResponse.json(
+          { error: "Your free scan has been used. Upgrade to run another scan." },
+          { status: 402 },
+        );
+      }
+      freeScanReservedForUserId = databaseUser.id;
+    }
 
     const limits = planLimits[databaseUser?.plan ?? "FREE"];
     if (databaseUser) {
@@ -135,6 +160,7 @@ export async function POST(request: Request) {
       });
     } catch {
       await releaseReservedSlot();
+      await releaseFreeScan();
       await prisma.scan.update({
         data: { status: "FAILED" },
         where: { id: scan.id },
@@ -156,6 +182,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     await releaseReservedSlot();
+    await releaseFreeScan();
     console.error("[api/scans] failed to create scan", {
       code: error instanceof Error && "code" in error ? error.code : undefined,
       message: error instanceof Error ? error.message : "Unknown database error",

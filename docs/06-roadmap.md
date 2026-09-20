@@ -140,37 +140,14 @@ Add API documentation and integration examples
 Add production runbooks and incident procedures
 Result: Users and operators can understand, control, and recover from scan failures.
 
-/*
- Priority    Finding
-  ━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Blocker     Build does not type-check, so no production build can be released.
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   High        Invalid scan requests reserve a Redis concurrency slot before JSON/URL validation, then return without releasing it. Two malformed
-               requests can block an identity for up to 30 minutes. scans route (app/api/scans/route.ts:31)
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   High        “Scheduled” scans run immediately, then never schedule themselves again: the queue job has neither a delay/repeat configuration nor
-               a subsequent enqueue. schedule creation (app/api/schedules/route.ts:40), worker (worker/scan-worker.ts:352)
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   High        Plan limits are not enforced. Scan usage is incremented but never checked; site count, scheduled scans, reports, and GitHub-action
-               access are unrestricted despite pricing promises. plan limits (lib/plan-limits.ts:3), usage increment (app/api/scans/route.ts:94)
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   High        Billing is a one-time Razorpay order that permanently assigns a plan; it is not a monthly subscription with renewal, expiry,
-               downgrade, or cancellation handling.
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   High        The Lighthouse subprocess scans arbitrary URLs with --no-sandbox and outside the Playwright request filter. This weakens isolation
-               for a service designed to visit untrusted sites. worker (worker/scan-worker.ts:479)
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Medium      Razorpay signature checks call timingSafeEqual without checking buffer lengths; malformed signatures can throw a 500 instead of
-               returning 400. webhook (app/api/webhooks/razorpay/route.ts:13)
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Medium      “Manual secure handoff” is stored but not implemented in the worker—the worker treats it as empty Playwright storage state and
-               performs an unauthenticated scan.
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Medium      Historical issue records are mutated to resolved when a later scan no longer finds them, undermining immutable historic reports/
-               audit evidence.
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Medium      No automated tests were found, and there are no Prisma migrations—only a schema and db push workflow.
-  ──────────  ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   Low         README, metadata, docs, and pricing are stale or contradictory: README says scanning is unimplemented and mentions Stripe/$ pricing;
-               code has Razorpay/INR and working scanning. Layout metadata still says “Create Next App.” layout (app/layout.tsx:25)
-*/
+
+//   1. Plan entitlement enforcement — limits for sites, monthly scans, schedules, reports, and GitHub Action access are not enforced.
+  2. Subscription lifecycle — Razorpay uses one-time orders, not recurring subscriptions, renewal, expiry, cancellation, or downgrades.
+  3. Worker isolation — Lighthouse runs arbitrary sites with Chromium sandboxing disabled and outside Playwright’s request filter.
+  4. Manual browser handoff — the UI promises a secure MFA/CAPTCHA handoff, but the worker cannot actually perform one.
+  5. Historic-report integrity — later scans modify old issues to “resolved,” changing historical evidence.
+  6. Database/testing readiness — no migrations or automated test suite.
+  7. Dependency remediation — npm audit reports four high-severity Prisma-transitive findings; its proposed fix needs compatibility review.
+  8. Documentation/configuration drift — README, metadata, pricing, and .env.example do not match the implemented product.
+
+  //

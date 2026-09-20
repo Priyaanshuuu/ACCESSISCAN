@@ -82,6 +82,7 @@ model User {
   notificationPreferences NotificationPreference?
   usagePeriods UsagePeriod[]
   plan      UserPlan @default(FREE)
+  freeScanUsed Boolean @default(false)
   payments  Payment[]
   browserStates BrowserState[]
 }
