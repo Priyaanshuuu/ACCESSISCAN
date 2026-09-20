@@ -221,7 +221,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
 
   if (!scan || scan.status === "queued" || scan.status === "running") {
     return (
-      <Card className="w-full max-w-2xl border-[#d0ddca] bg-white shadow-[0_24px_70px_rgba(25,56,45,0.1)]">
+      <Card role="status" aria-live="polite" className="w-full max-w-2xl border-[#d0ddca] bg-white shadow-sm">
         <CardHeader className="space-y-4 border-b border-[#e1e8df] p-6 sm:p-8">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -234,6 +234,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
         </CardHeader>
         <CardContent className="space-y-4 p-6 sm:p-8">
           <p className="text-sm text-[#68776d]">{scan?.url || initialUrl || "Your website"}</p>
+          <p className="text-sm leading-6 text-muted-foreground">We’re checking your website and collecting findings. This page updates automatically when your results are ready.</p>
           <Skeleton className="h-24 w-full bg-[#f0f4ed]" />
         </CardContent>
       </Card>
@@ -259,8 +260,8 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
   const reviewedCount = scan.issues.filter((issue) => issue.reviewStatus !== "not_reviewed").length;
 
   return (
-    <div className="w-full max-w-3xl space-y-5">
-      <Card className="border-[#d0ddca] bg-white shadow-[0_24px_70px_rgba(25,56,45,0.1)]">
+    <div className="scan-report min-w-0 w-full space-y-6">
+      <Card className="border-[#d0ddca] bg-white shadow-sm">
         <CardHeader className="border-b border-[#e1e8df] p-6 sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -271,7 +272,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
             <Badge className="w-fit bg-[#dff1ba] text-[#38531f]">Completed</Badge>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-5 p-6 sm:grid-cols-4 sm:p-8">
+        <CardContent className="grid grid-cols-2 gap-5 p-6 sm:grid-cols-3 sm:p-8 lg:grid-cols-5 [&>div]:rounded-xl [&>div]:bg-[#f5f8f1] [&>div]:p-4">
           <div><ScoreLabel explanation="Weighted score across accessibility, performance, SEO, and best practices." label="Overall" score={scan.overallScore} /></div>
           <div><ScoreLabel explanation="Total number of automated accessibility findings." label="Issues" score={scan.issues.length} /></div>
           <div><ScoreLabel explanation="Pages crawled within your plan limits." label="Pages" score={scan.pages.length} /></div>
@@ -325,7 +326,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
       </Card>
 
       <Tabs className="w-full" defaultValue="accessibility">
-        <TabsList className="w-full bg-[#e6eee1] sm:w-fit">
+        <TabsList className="!h-auto w-full flex-wrap justify-start gap-1 bg-[#e6eee1] p-1.5 [&>button]:min-h-10 [&>button]:px-3 sm:w-fit">
           <TabsTrigger value="accessibility">Accessibility</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
@@ -346,7 +347,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
               <AccordionItem key={issue.id} value={issue.id}>
                 <AccordionTrigger className="gap-4 py-4 hover:no-underline">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold text-[#19382d]">{issue.help}</span>
+                    <span className="block text-pretty font-semibold text-[#19382d]">{issue.help}</span>
                     <span className="mt-1 block font-mono text-xs font-normal text-[#89958c]">{issue.rule}</span>
                   </span>
                   <Badge className={impactStyles[issue.severity] || "bg-[#eef1ed] text-[#5d6b62]"}>{formatSeverity(issue.severity)}</Badge>

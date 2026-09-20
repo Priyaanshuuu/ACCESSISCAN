@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Accessibility, ArrowUpRight, Gauge, Search } from "lucide-react";
 import { Show, SignInButton } from "@clerk/nextjs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -83,21 +84,14 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f5f7f2] text-[#19251f]">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-6 sm:px-10 lg:px-14">
-        <header className="flex items-center justify-between border-b border-[#d7dfd5] pb-5">
-          <Link className="flex items-center gap-3 text-sm font-semibold tracking-[0.16em] text-[#19382d]" href="/">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#d8f36a] text-lg font-bold tracking-normal text-[#19382d]">A</span>
-            ACCESSISCAN
-          </Link>
-          <span className="hidden text-xs font-medium uppercase tracking-[0.18em] text-[#718078] sm:block">Website intelligence</span>
-        </header>
+    <main id="main-content" className="flex-1 text-[#19251f]">
+      <div className="page-shell flex flex-col">
 
-        <section className="grid flex-1 items-center gap-14 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20 lg:py-20">
+        <section className="grid items-center gap-12 pb-16 pt-6 lg:grid-cols-[1.2fr_0.8fr] lg:gap-16 lg:py-16">
           <div>
-            <p className="mb-6 text-xs font-bold uppercase tracking-[0.24em] text-[#688227]">A clearer web starts here</p>
-            <h1 className="max-w-2xl text-5xl font-semibold leading-[0.98] tracking-[-0.055em] text-[#19382d] sm:text-7xl">
-              Find what your website is missing.
+            <p className="eyebrow mb-6 inline-flex items-center gap-2 rounded-full border border-[#dce5cd] bg-[#edf3e3] px-3 py-2"><span className="size-1.5 rounded-full bg-[#688227]" />A clearer web starts here</p>
+            <h1 className="max-w-2xl text-4xl font-semibold leading-[1.08] tracking-[-0.045em] text-[#19382d] sm:text-6xl lg:text-[4.25rem]">
+              Better websites.<br /><span className="text-[#66764f]">One scan at a time.</span>
             </h1>
             <p className="mt-7 max-w-xl text-lg leading-8 text-[#5d6b62] sm:text-xl">
               Scan a deployed site for accessibility, performance, and SEO issues, then get practical fixes in plain English.
@@ -105,9 +99,10 @@ export default function Home() {
 
             <Show when="signed-out">
               <div className="mt-10 max-w-xl rounded-xl border border-[#d9e4d3] bg-white p-5 shadow-[0_8px_24px_rgba(25,56,45,0.05)]">
-                <p className="text-sm leading-6 text-[#5d6b62]">Sign in to start a scan and keep your results connected to your account.</p>
+                <p className="font-semibold text-primary">Your first scan is free.</p>
+                <p className="mt-1 text-sm leading-6 text-[#5d6b62]">Find the issues, understand the impact, and know what to fix next.</p>
                 <SignInButton mode="modal">
-                  <Button className="mt-4 bg-[#19382d] text-white hover:bg-[#285342]" type="button">Sign in to scan</Button>
+                  <Button className="mt-4 bg-[#19382d] text-white hover:bg-[#285342]" type="button">Start your first scan <ArrowUpRight aria-hidden="true" /></Button>
                 </SignInButton>
               </div>
             </Show>
@@ -176,26 +171,37 @@ export default function Home() {
           </div>
 
           <div className="relative mx-auto w-full max-w-md lg:mr-0">
-            <div className="absolute -inset-5 rounded-[2rem] bg-[#e3eddb] blur-2xl" />
-            <div className="relative rounded-[1.75rem] border border-[#d0ddca] bg-[#19382d] p-5 text-white shadow-[0_24px_70px_rgba(25,56,45,0.2)] sm:p-7">
+            <div className="relative rounded-2xl border border-[#d0ddca] bg-[#19382d] p-6 text-white shadow-[0_16px_40px_rgba(25,56,45,0.12)] sm:p-8">
               <div className="flex items-center justify-between border-b border-white/15 pb-5">
                 <span className="text-sm font-medium text-white/70">Example scan</span>
-                <span className="rounded-full bg-[#d8f36a] px-3 py-1 text-xs font-bold text-[#19382d]">LIVE VIEW</span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/80">Report preview</span>
               </div>
               <div className="py-8">
-                <p className="text-sm text-white/60">accessiscan.com</p>
+                <p className="text-sm text-white/70">yourwebsite.com</p>
                 <div className="mt-4 flex items-end gap-3">
                   <span className="text-7xl font-semibold tracking-[-0.08em] text-[#d8f36a]">82</span>
                   <span className="mb-2 text-sm text-white/60">overall score</span>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 border-t border-white/15 pt-5">
-                <div><p className="text-xs text-white/50">A11Y</p><p className="mt-1 text-xl font-semibold">94</p></div>
-                <div><p className="text-xs text-white/50">SPEED</p><p className="mt-1 text-xl font-semibold">76</p></div>
-                <div><p className="text-xs text-white/50">SEO</p><p className="mt-1 text-xl font-semibold">81</p></div>
+              <div className="space-y-4 border-t border-white/15 pt-5">
+                {[{ label: "Accessibility", score: 94 }, { label: "Performance", score: 76 }, { label: "SEO", score: 81 }].map(({ label, score }) => (
+                  <div key={label}>
+                    <div className="mb-2 flex justify-between text-sm"><span className="text-white/80">{label}</span><span className="font-medium tabular-nums">{score}</span></div>
+                    <div aria-hidden="true" className="h-1.5 rounded-full bg-white/10"><div className="h-full rounded-full bg-[#d8f36a]" style={{ width: `${score}%` }} /></div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
+        </section>
+
+        <section aria-label="What your scan covers" className="mb-12 grid gap-6 border-t border-border pt-8 sm:grid-cols-3">
+          {[{ Icon: Accessibility, title: "Make it accessible", description: "Find barriers that make your website harder to use." }, { Icon: Gauge, title: "Make it faster", description: "See what slows pages down and where to improve." }, { Icon: Search, title: "Make it discoverable", description: "Check the SEO basics that help people find your site." }].map(({ Icon, title, description }) => (
+            <div key={title} className="flex gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-white text-primary"><Icon aria-hidden="true" className="size-5" /></span>
+              <div><h2 className="text-sm font-semibold text-primary">{title}</h2><p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p></div>
+            </div>
+          ))}
         </section>
 
         <footer className="flex flex-col gap-2 border-t border-[#d7dfd5] pt-5 text-xs uppercase tracking-[0.16em] text-[#89958c] sm:flex-row sm:items-center sm:justify-between">
