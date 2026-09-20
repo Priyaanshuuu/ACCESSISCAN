@@ -116,13 +116,13 @@ const worker = new Worker<ScanJob>(
     }
 
     const startedAt = Date.now();
-    const browser = await chromium.launch({ headless: true });
     const browserState = job.data.browserStateId
       ? await prisma.browserState.findUnique({ where: { id: job.data.browserStateId } })
       : null;
     if (browserState?.expiresAt && browserState.expiresAt < new Date()) {
       throw new Error("The authenticated browser session has expired.");
     }
+    const browser = await chromium.launch({ headless: true });
 
     try {
       const context = await browser.newContext({
