@@ -1,5 +1,3 @@
-import crypto from "node:crypto";
-
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
@@ -36,9 +34,4 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({ amountPaise: selectedPlan.amountPaise, currency: "INR", keyId: process.env.RAZORPAY_KEY_ID, orderId: order.id, paymentId: payment.id, planName: selectedPlan.name }, { status: 201 });
-}
-
-export function verifyRazorpaySignature(orderId: string, paymentId: string, signature: string) {
-  const expected = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "").update(`${orderId}|${paymentId}`).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }

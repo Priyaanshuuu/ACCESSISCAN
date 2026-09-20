@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { matchesHexSignature } from "@/lib/secure-compare";
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   if (!signature || !secret) return NextResponse.json({ error: "Webhook is not configured." }, { status: 400 });
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-  if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) return NextResponse.json({ error: "Invalid webhook signature." }, { status: 400 });
+  if (!matchesHexSignature(expected, signature)) return NextResponse.json({ error: "Invalid webhook signature." }, { status: 400 });
 
   const event = JSON.parse(rawBody) as { event?: string; payload?: { payment?: { entity?: { order_id?: string; id?: string } } } };
   if (event.event === "payment.captured") {
