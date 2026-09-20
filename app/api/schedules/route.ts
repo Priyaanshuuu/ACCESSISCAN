@@ -37,6 +37,11 @@ export async function POST(request: Request) {
     where: { userId_siteId: { siteId: site.id, userId: site.userId } },
   });
 
-  await scheduleQueue.add("scheduled-scan", { scheduleId: schedule.id }, { jobId: scheduleJobId(schedule.id) });
+ await scheduleQueue.add(
+    "scheduled-scan",
+    { scheduleId: schedule.id },
+    { jobId: `scheduled-scan-${schedule.id}` },
+  );
+  
   return NextResponse.json({ schedule }, { status: 201 });
 }
