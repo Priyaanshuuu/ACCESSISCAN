@@ -2,6 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { hasPaidPlan } from "@/lib/plan-limits";
 import { removeScheduledScanJob, syncScheduledScanJob } from "@/lib/schedule-queue";
 
 type Props = { params: Promise<{ scheduleId: string }> };
@@ -9,10 +10,12 @@ type Props = { params: Promise<{ scheduleId: string }> };
 export async function PATCH(request: Request, { params }: Props) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  const databaseUser = await getPaidDatabaseUser(user.id);
+  if (!databaseUser) return upgradeRequired();
   const { scheduleId } = await params;
   const body = (await request.json()) as { enabled?: boolean };
   const schedule = await prisma.scheduledScan.findFirst({
-    where: { id: scheduleId, user: { clerkId: user.id } },
+    where: { id: scheduleId, userId: databaseUser.id },
   });
   if (!schedule) return NextResponse.json({ error: "Schedule not found." }, { status: 404 });
 
@@ -39,8 +42,10 @@ export async function PATCH(request: Request, { params }: Props) {
 export async function DELETE(_request: Request, { params }: Props) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  const databaseUser = await getPaidDatabaseUser(user.id);
+  if (!databaseUser) return upgradeRequired();
   const { scheduleId } = await params;
-  const result = await prisma.scheduledScan.deleteMany({ where: { id: scheduleId, user: { clerkId: user.id } } });
+  const result = await prisma.scheduledScan.deleteMany({ where: { id: scheduleId, userId: databaseUser.id } });
   if (!result.count) return NextResponse.json({ error: "Schedule not found." }, { status: 404 });
   await removeScheduledScanJob(scheduleId);
   return new NextResponse(null, { status: 204 });
@@ -50,4 +55,16 @@ function nextRun(frequency: "DAILY" | "WEEKLY") {
   const date = new Date();
   date.setDate(date.getDate() + (frequency === "DAILY" ? 1 : 7));
   return date;
+}
+
+async function getPaidDatabaseUser(clerkId: string) {
+  const databaseUser = await prisma.user.findUnique({ where: { clerkId } });
+  return databaseUser && hasPaidPlan(databaseUser.plan) ? databaseUser : null;
+}
+
+function upgradeRequired() {
+  return NextResponse.json(
+    { error: "Upgrade to a paid plan to schedule scans." },
+    { status: 403 },
+  );
 }

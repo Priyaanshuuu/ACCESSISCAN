@@ -25,6 +25,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
         orderBy: [{ impact: "desc" }, { rule: "asc" }],
       },
       pages: { orderBy: { depth: "asc" } },
+      user: { select: { plan: true } },
     },
     where: userId
       ? { id: scanId, user: { clerkId: userId } }
@@ -47,6 +48,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       pages: scan.pages,
       overallScore: scan.overallScore,
       bestPracticesScore: scan.bestPracticesScore,
+      canDownloadReport: Boolean(scan.user && scan.user.plan !== "FREE"),
       lighthouseAudits: scan.lighthouseAudits,
       lighthouseError: scan.lighthouseError,
       aeoSignals: scan.aeoSignals,

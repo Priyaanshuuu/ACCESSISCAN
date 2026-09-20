@@ -74,6 +74,7 @@ type ScanPage = {
 
 type ScanData = {
   bestPracticesScore: number | null;
+  canDownloadReport: boolean;
   durationMs: number | null;
   finalUrl: string | null;
   failureReason: string | null;
@@ -518,7 +519,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
       </Tabs>
 
       <Link className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} href="/">Scan another website</Link>
-      {scan.status === "completed" && (
+      {scan.canDownloadReport && scan.status === "completed" && (
         <a
           className={buttonVariants({ variant: "outline", className: "ml-2" })}
           href={`/api/reports/${scan.id}`}

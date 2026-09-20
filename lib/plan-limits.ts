@@ -6,3 +6,7 @@ export const planLimits: Record<UserPlan, { maxDepth: number; maxPages: number }
   BUSINESS: { maxDepth: 3, maxPages: 50 },
   AGENCY: { maxDepth: 5, maxPages: 250 },
 };
+
+export function hasPaidPlan(plan: UserPlan) {
+  return plan !== "FREE";
+}

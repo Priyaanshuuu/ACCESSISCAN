@@ -2,17 +2,20 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { encryptBrowserState } from "@/lib/browser-state-crypto";
+import { encryptBrowserState, validatePlaywrightStorageState } from "@/lib/browser-state-crypto";
+import { hasPaidPlan } from "@/lib/plan-limits";
 
 export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  const databaseUser = await getPaidDatabaseUser(user.id);
+  if (!databaseUser) return upgradeRequired();
   await prisma.browserState.deleteMany({
-    where: { expiresAt: { lt: new Date() }, user: { clerkId: user.id } },
+    where: { expiresAt: { lt: new Date() }, userId: databaseUser.id },
   });
   const states = await prisma.browserState.findMany({
     select: { createdAt: true, expiresAt: true, id: true, label: true },
-    where: { user: { clerkId: user.id } },
+    where: { userId: databaseUser.id },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json({ states });
@@ -21,6 +24,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  const databaseUser = await getPaidDatabaseUser(user.id);
+  if (!databaseUser) return upgradeRequired();
   const body = (await request.json()) as {
     expiresAt?: string;
     kind?: "storage_state" | "manual_handoff";
@@ -36,8 +41,6 @@ export async function POST(request: Request) {
   const kind = body.kind === "manual_handoff" ? "manual_handoff" : "storage_state";
 
   if (kind === "manual_handoff") {
-    const databaseUser = await prisma.user.findUnique({ where: { clerkId: user.id } });
-    if (!databaseUser) return NextResponse.json({ error: "User profile is not ready." }, { status: 409 });
     const state = await prisma.browserState.create({
       data: {
         ciphertext: encryptBrowserState({
@@ -66,8 +69,6 @@ export async function POST(request: Request) {
     }, { status: 400 });
   }
 
-  const databaseUser = await prisma.user.findUnique({ where: { clerkId: user.id } });
-  if (!databaseUser) return NextResponse.json({ error: "User profile is not ready." }, { status: 409 });
   const state = await prisma.browserState.create({
     data: {
       ciphertext: encryptBrowserState(body.state),
@@ -81,4 +82,14 @@ export async function POST(request: Request) {
   return NextResponse.json({ state }, { status: 201 });
 }
 
-import { validatePlaywrightStorageState } from "@/lib/browser-state-crypto";
+async function getPaidDatabaseUser(clerkId: string) {
+  const databaseUser = await prisma.user.findUnique({ where: { clerkId } });
+  return databaseUser && hasPaidPlan(databaseUser.plan) ? databaseUser : null;
+}
+
+function upgradeRequired() {
+  return NextResponse.json(
+    { error: "Upgrade to a paid plan to use authenticated browser sessions." },
+    { status: 403 },
+  );
+}
