@@ -4,7 +4,9 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Accessibility, ArrowUpRight, Gauge, Search } from "lucide-react";
-import { Show, SignInButton } from "@clerk/nextjs";
+import { Show, SignInButton, useAuth } from "@clerk/nextjs";
+import type { UserPlan } from "@prisma/client";
+import { getPaidResource, requestJson } from "@/lib/client-api";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +22,7 @@ function isValidWebsiteUrl(value: string) {
 }
 
 export default function Home() {
+  const { isSignedIn } = useAuth();
   const searchParams = useSearchParams();
   const [url, setUrl] = useState(() => searchParams.get("url") ?? "");
   const [error, setError] = useState("");
@@ -30,10 +33,14 @@ export default function Home() {
   const [browserStateId, setBrowserStateId] = useState("none");
 
   useEffect(() => {
-    void fetch("/api/browser-states", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : { states: [] })
-      .then((data: { states?: typeof browserStates }) => setBrowserStates(data.states ?? []));
-  }, []);
+    if (!isSignedIn) return;
+    let active = true;
+    void requestJson<{ plan: UserPlan }>("/api/dashboard")
+      .then(({ plan }) => getPaidResource(plan, "/api/browser-states", { states: [] as typeof browserStates }))
+      .then(({ states }) => { if (active) setBrowserStates(states); })
+      .catch(() => { if (active) setBrowserStates([]); });
+    return () => { active = false; };
+  }, [isSignedIn]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

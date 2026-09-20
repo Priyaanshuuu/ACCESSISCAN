@@ -36,7 +36,7 @@ export async function PATCH(request: Request, { params }: Props) {
     await removeScheduledScanJob(updated.id);
   }
 
-  return NextResponse.json({ enabled });
+  return NextResponse.json({ enabled, schedule: updated });
 }
 
 export async function DELETE(_request: Request, { params }: Props) {
