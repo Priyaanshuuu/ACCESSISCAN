@@ -253,6 +253,8 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
   const seoAudits = getRecord(audits.seo);
   const aeo = getRecord(scan.aeoSignals);
   const geo = getRecord(scan.geoSignals);
+  const pdfSignals = getRecord(scan.pdfSignals);
+  const hasPdfSignals = Object.keys(pdfSignals).length > 0;
   const reviewedCount = scan.issues.filter((issue) => issue.reviewStatus !== "not_reviewed").length;
 
   return (
@@ -327,7 +329,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
           <TabsTrigger value="aeo-geo">AEO + GEO</TabsTrigger>
-          {scan.pdfSignals && <TabsTrigger value="pdf">PDF</TabsTrigger>}
+          {hasPdfSignals && <TabsTrigger value="pdf">PDF</TabsTrigger>}
         </TabsList>
 
         <TabsContent className="mt-5" value="accessibility">
@@ -495,7 +497,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
           </Card>
         </TabsContent>
 
-        {scan.pdfSignals && (
+        {hasPdfSignals && (
           <TabsContent className="mt-5" value="pdf">
             <Card className="border-[#d0ddca] bg-white">
               <CardHeader className="p-6 sm:p-8">
@@ -503,7 +505,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                 <CardDescription>Automated PDF structure and text signals. These do not establish PDF/UA compliance.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3 p-6 pt-0 text-sm text-[#5d6b62] sm:grid-cols-2 sm:p-8 sm:pt-0">
-                {Object.entries(getRecord(scan.pdfSignals)).map(([key, value]) => (
+                {Object.entries(pdfSignals).map(([key, value]) => (
                   <div className="rounded-lg border border-[#e1e8df] p-3" key={key}>
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#89958c]">{key}</p>
                     <p className="mt-1 font-medium text-[#19382d]">{String(value)}</p>
