@@ -26,22 +26,48 @@ function isBlockedIpv4(address: string) {
 }
 
 function isBlockedIpv6(address: string) {
-  const normalized = address.toLowerCase();
+  const segments = parseIpv6(address);
+  if (!segments) return false;
+
+  const isIpv4Mapped = segments.slice(0, 5).every((segment) => segment === 0) && segments[5] === 0xffff;
+  if (isIpv4Mapped) {
+    const first = segments[6] >> 8;
+    const second = segments[6] & 0xff;
+    const third = segments[7] >> 8;
+    const fourth = segments[7] & 0xff;
+    return isBlockedIpv4(`${first}.${second}.${third}.${fourth}`);
+  }
+
+  const first = segments[0];
   return (
-    normalized === "::" ||
-    normalized === "::1" ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd") ||
-    normalized.startsWith("fe8") ||
-    normalized.startsWith("fe9") ||
-    normalized.startsWith("fea") ||
-    normalized.startsWith("feb") ||
-    normalized.startsWith("ff") ||
-    normalized.startsWith("::ffff:127.") ||
-    normalized.startsWith("::ffff:10.") ||
-    normalized.startsWith("::ffff:192.168.") ||
-    normalized.startsWith("::ffff:172.")
+    segments.every((segment) => segment === 0) ||
+    (segments.slice(0, 7).every((segment) => segment === 0) && segments[7] === 1) ||
+    (first & 0xfe00) === 0xfc00 ||
+    (first & 0xffc0) === 0xfe80 ||
+    (first & 0xff00) === 0xff00
   );
+}
+
+function parseIpv6(address: string) {
+  let normalized = address.toLowerCase();
+  const embeddedIpv4Index = normalized.lastIndexOf(".");
+  if (embeddedIpv4Index !== -1) {
+    const separator = normalized.lastIndexOf(":", embeddedIpv4Index);
+    if (separator === -1) return null;
+    const octets = normalized.slice(separator + 1).split(".").map(Number);
+    if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return null;
+    normalized = `${normalized.slice(0, separator + 1)}${((octets[0] << 8) | octets[1]).toString(16)}:${((octets[2] << 8) | octets[3]).toString(16)}`;
+  }
+
+  const halves = normalized.split("::");
+  if (halves.length > 2) return null;
+  const left = halves[0] ? halves[0].split(":").map((segment) => parseInt(segment, 16)) : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(":").map((segment) => parseInt(segment, 16)) : [];
+  if ([...left, ...right].some((segment) => !Number.isInteger(segment) || segment < 0 || segment > 0xffff)) return null;
+
+  const missing = 8 - left.length - right.length;
+  if ((halves.length === 1 && missing !== 0) || missing < 1) return null;
+  return [...left, ...Array.from({ length: missing }, () => 0), ...right];
 }
 
 function isBlockedAddress(address: string) {
@@ -60,7 +86,17 @@ export async function assertPublicUrl(value: string) {
     throw new Error("The URL must not contain credentials.");
   }
 
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+  await resolvePublicHostname(url.hostname);
+
+  return url.toString();
+}
+
+export async function resolvePublicHostname(value: string) {
+  const hostname = value
+    .toLowerCase()
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .replace(/\.$/, "");
   if (
     blockedHostnames.has(hostname) ||
     hostname.endsWith(".localhost") ||
@@ -77,5 +113,5 @@ export async function assertPublicUrl(value: string) {
     throw new Error("Private, link-local, and metadata destinations are not allowed.");
   }
 
-  return url.toString();
+  return addresses;
 }

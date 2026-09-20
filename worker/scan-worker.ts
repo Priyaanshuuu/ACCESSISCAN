@@ -3,6 +3,8 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import crypto from "node:crypto";
 import { execFile } from "node:child_process";
+import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
+import { connect as netConnect } from "node:net";
 import { promisify } from "node:util";
 import type { AxeResults } from "axe-core";
 import { Worker } from "bullmq";
@@ -14,7 +16,7 @@ import { scanQueue, type ScanJob } from "@/lib/queue";
 import { decryptBrowserState } from "@/lib/browser-state-crypto";
 import { releaseScanSlot } from "@/lib/rate-limit";
 import { scheduleJobId, scheduleQueue, type ScheduledScanJob } from "@/lib/schedule-queue";
-import { assertPublicUrl } from "@/lib/url-safety";
+import { assertPublicUrl, resolvePublicHostname } from "@/lib/url-safety";
 
 type AxeWindow = Window & {
   axe: {
@@ -466,21 +468,110 @@ void prisma.scan.updateMany({
 
 async function runLighthouse(url: string) {
   const lighthouseCli = require.resolve("lighthouse/cli/index.js");
-  const { stdout } = await execFileAsync(
-    process.execPath,
-    [
-      lighthouseCli,
-      url,
-      "--output=json",
-      "--output-path=stdout",
-      "--only-categories=performance,seo,best-practices",
-      "--chrome-flags=--headless --disable-dev-shm-usage",
-      "--quiet",
-    ],
-    { maxBuffer: 25 * 1024 * 1024 },
-  );
+  await assertPublicUrl(url);
+  const proxy = await createLighthouseProxy();
 
-  return JSON.parse(stdout) as LighthouseResult;
+  try {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [
+        lighthouseCli,
+        url,
+        "--output=json",
+        "--output-path=stdout",
+        "--only-categories=performance,seo,best-practices",
+        `--chrome-flags=--headless --disable-dev-shm-usage --proxy-server=http://127.0.0.1:${proxy.port} --proxy-bypass-list=<-loopback>`,
+        "--quiet",
+      ],
+      { maxBuffer: 25 * 1024 * 1024 },
+    );
+
+    return JSON.parse(stdout) as LighthouseResult;
+  } finally {
+    await closeLighthouseProxy(proxy.server);
+  }
+}
+
+async function createLighthouseProxy() {
+  const server = createServer((request, response) => {
+    void proxyHttpRequest(request, response);
+  });
+  server.on("connect", (request, clientSocket, head) => {
+    void proxyHttpsRequest(request, clientSocket, head);
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    await closeLighthouseProxy(server);
+    throw new Error("Lighthouse proxy did not expose a TCP port.");
+  }
+
+  return { port: address.port, server };
+}
+
+async function proxyHttpRequest(request: IncomingMessage, response: ServerResponse) {
+  try {
+    const target = new URL(request.url || "", `http://${request.headers.host || ""}`);
+    if (target.protocol !== "http:") throw new Error("Only HTTP proxy requests are supported.");
+    const address = (await resolvePublicHostname(target.hostname))[0];
+    const upstream = httpRequest(
+      {
+        headers: { ...request.headers, connection: "close", host: target.host },
+        hostname: address,
+        method: request.method,
+        path: `${target.pathname}${target.search}`,
+        port: Number(target.port || 80),
+      },
+      (upstreamResponse) => {
+        response.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
+        upstreamResponse.pipe(response);
+      },
+    );
+    upstream.on("error", () => {
+      if (!response.headersSent) response.writeHead(502);
+      response.end();
+    });
+    request.pipe(upstream);
+  } catch {
+    response.writeHead(403);
+    response.end("Blocked destination");
+  }
+}
+
+async function proxyHttpsRequest(
+  request: IncomingMessage,
+  clientSocket: import("node:stream").Duplex,
+  head: Buffer,
+) {
+  try {
+    const target = new URL(`http://${request.url}`);
+    const address = (await resolvePublicHostname(target.hostname))[0];
+    const upstream = netConnect({
+      host: address,
+      port: Number(target.port || 443),
+    });
+    upstream.once("connect", () => {
+      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      if (head.length) upstream.write(head);
+      clientSocket.pipe(upstream);
+      upstream.pipe(clientSocket);
+    });
+    upstream.once("error", () => clientSocket.destroy());
+  } catch {
+    clientSocket.destroy();
+  }
+}
+
+async function closeLighthouseProxy(server: import("node:http").Server) {
+  if (!server.listening) return;
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
 }
 
 function normalizeSeverity(impact: string | null | undefined) {
