@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { scanQueue, type ScanJob } from "@/lib/queue";
 import { decryptBrowserState } from "@/lib/browser-state-crypto";
 import { releaseScanSlot } from "@/lib/rate-limit";
-import type { ScheduledScanJob } from "@/lib/schedule-queue";
+import { scheduleJobId, scheduleQueue, type ScheduledScanJob } from "@/lib/schedule-queue";
 import { assertPublicUrl } from "@/lib/url-safety";
 
 type AxeWindow = Window & {
@@ -358,6 +358,14 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
     });
     if (!schedule || !schedule.enabled) return;
 
+    const scheduler = await scheduleQueue.getJobScheduler(scheduleJobId(schedule.id));
+    if (scheduler?.next) {
+      await prisma.scheduledScan.update({
+        data: { nextRunAt: new Date(scheduler.next) },
+        where: { id: schedule.id },
+      });
+    }
+
     const scan = await prisma.scan.create({
       data: {
         id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
@@ -376,9 +384,6 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
       url: scan.url,
     });
 
-    const nextRunAt = new Date(schedule.nextRunAt);
-    nextRunAt.setDate(nextRunAt.getDate() + (schedule.frequency === "DAILY" ? 1 : 7));
-    await prisma.scheduledScan.update({ data: { nextRunAt }, where: { id: schedule.id } });
   },
   { connection: workerConnection, concurrency: 1 },
 );

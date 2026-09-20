@@ -2,7 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { scheduleJobId, scheduleQueue } from "@/lib/schedule-queue";
+import { syncScheduledScanJob } from "@/lib/schedule-queue";
 
 function nextRun(frequency: "DAILY" | "WEEKLY") {
   const date = new Date();
@@ -37,11 +37,11 @@ export async function POST(request: Request) {
     where: { userId_siteId: { siteId: site.id, userId: site.userId } },
   });
 
- await scheduleQueue.add(
-    "scheduled-scan",
-    { scheduleId: schedule.id },
-    { jobId: `scheduled-scan-${schedule.id}` },
-  );
-  
+  await syncScheduledScanJob({
+    frequency: schedule.frequency,
+    nextRunAt: schedule.nextRunAt,
+    scheduleId: schedule.id,
+  });
+
   return NextResponse.json({ schedule }, { status: 201 });
 }
