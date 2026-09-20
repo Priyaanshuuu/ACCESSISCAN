@@ -122,7 +122,7 @@ const worker = new Worker<ScanJob>(
     if (browserState?.expiresAt && browserState.expiresAt < new Date()) {
       throw new Error("The authenticated browser session has expired.");
     }
-    if (browserState?.requiresManualHandoff || browserState?.kind !== "storage_state") {
+    if (browserState && (browserState.requiresManualHandoff || browserState.kind !== "storage_state")) {
       throw new Error("Manual browser handoff is not supported. Upload a Playwright storage-state JSON instead.");
     }
     const browser = await chromium.launch({ headless: true });
