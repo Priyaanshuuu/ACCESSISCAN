@@ -1,77 +1,48 @@
-# Stack, Third Parties & Libraries
+# Technology stack
 
-## Core Stack
+This list describes dependencies used by the current repository. It intentionally does not list planned services.
 
-| Layer | Choice | Why |
+## Application
+
+| Area | Technology | What it does |
 |---|---|---|
-| Language | TypeScript | Type safety, shared types across monorepo |
-| Frontend | Next.js 16 (App Router) | SSR, route handlers, file-based routing, Vercel-native |
-| UI | React 19 + Tailwind + shadcn/ui | Fast, accessible components (Radix-based) |
-| Backend API | Next.js route handlers | Shared deployment and authentication boundary |
-| Worker | Node.js + Playwright | Headless browser automation |
-| Database | PostgreSQL | Relational, reliable, mature |
-| ORM | Prisma | Best DX, migrations, type-safe |
-| Queue | BullMQ + Redis | Simple, reliable, Bull Board UI |
-| Auth | Clerk | GitHub OAuth, session management |
-| Storage | Cloudflare R2 | S3-compatible, zero egress |
-| Email | Resend | Modern API, React email templates |
-| Payments | Stripe + Razorpay | Global + India |
-| Monitoring | Sentry + Axiom | Errors + logs |
-| Deploy (Web) | Vercel | Next.js native |
-| Deploy (Worker) | Railway / Fly.io | Long-running process |
-| CI/CD | GitHub Actions | Obvious |
+| Web app | Next.js 16 App Router | Pages, server rendering, and API route handlers |
+| UI | React 19, Tailwind CSS, local UI components | Dashboard and scan results |
+| Language | TypeScript | Application, worker, and shared utilities |
+| Authentication | Clerk | Sign-in, sessions, and user identity |
+| Database | PostgreSQL with Prisma 7 | Users, sites, scans, issues, schedules, and browser states |
+| Queue | Redis with BullMQ 6 | Scan jobs, retries, rate limits, and repeatable jobs |
 
-## Scanning Engine
+## Scan engine
 
-| Library | Purpose |
+| Library | Role |
 |---|---|
-| Playwright | Headless browser (Chromium/Firefox/WebKit) |
-| axe-core | WCAG 2.2 AA accessibility rules |
-| @axe-core/playwright | Playwright integration |
-| lighthouse | Performance, SEO, best practices |
-| chrome-launcher | Chrome process for Lighthouse |
-| cheerio | HTML parsing for custom rules |
+| Playwright | Opens the target site and captures rendered page data |
+| axe-core | Finds automated WCAG accessibility violations |
+| Lighthouse | Measures performance, SEO, and best-practice signals |
+| Chrome Launcher | Starts the Chrome process used by Lighthouse |
+| PDFKit | Creates downloadable scan reports |
 
-## Supporting Libraries
+The worker runs separately from Next.js because browser scans are long-running and resource-intensive. Lighthouse traffic goes through a local validating proxy so redirects, DNS results, and subresources receive the same public-network checks.
 
-| Library | Purpose |
-|---|---|
-| Zod | Runtime validation |
-| TanStack Query | Server state (frontend) |
-| Zustand | Client state |
-| date-fns | Dates |
-| nanoid | Short IDs for reports |
-| pino | Structured logging |
-| ioredis | Redis client |
-| @react-pdf/renderer | PDF reports |
-| OpenAI / Anthropic SDK | AI fix suggestions |
-| Recharts | Score charts |
-| Lucide | Icons |
-| Sonner | Toasts |
+## Integrations
 
-## Dev Tools
-
-| Tool | Purpose |
-|---|---|
-| pnpm | Package manager + workspaces |
-| Turborepo | Monorepo build system |
-| ESLint + Prettier | Lint + format |
-| Vitest | Unit tests |
-| Playwright Test | E2E tests |
-| Docker | Local Postgres + Redis |
-| Husky + lint-staged | Pre-commit hooks |
-| changesets | Versioning for GitHub Action |
-
-## Third-Party Services (External)
-
-| Service | Purpose | Free Tier |
+| Service | Role | Required? |
 |---|---|---|
-| Clerk | Auth | 10K MAU |
-| Cloudflare R2 | Storage | 10 GB |
-| Resend | Email | 3K emails/mo |
-| Sentry | Errors | 5K events/mo |
-| Axiom | Logs | 500 MB/mo |
-| Stripe | Payments | Pay per txn |
-| Vercel | Hosting | Hobby free |
-| Railway | Worker | $5 credit |
-| Upstash | Redis | 10K commands/day |
+| Razorpay | Orders and payment verification | Only for billing |
+| Resend | Email delivery | Only for email notifications |
+| GitHub Actions | CI and optional scan action | Only for GitHub workflows |
+
+The repository does not currently use Stripe, R2, Sentry, Axiom, Turborepo, or a pnpm workspace. Add a dependency only when the corresponding feature is implemented and documented.
+
+## Development tools
+
+- ESLint for linting.
+- TypeScript compiler for type-checking.
+- Node's built-in test runner through `tsx` for unit and security tests.
+- GitHub Actions for lint, type-check, tests, and build verification.
+- Docker Compose for local Redis.
+
+## Runtime boundary
+
+The web app validates input and creates database and queue records. The worker owns browser execution and result persistence. Neither side should trust a URL, browser state, payment callback, or API key without validation and authorization.

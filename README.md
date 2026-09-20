@@ -1,243 +1,134 @@
 # AccessiScan
 
-> Automated accessibility, performance, and SEO scanning for vibe coders and small businesses.
+AccessiScan scans a deployed website and explains accessibility, performance, SEO, and best-practice issues in plain language. It is a Next.js web app backed by a queue and a separate browser worker.
 
+## What works today
 
-AccessiScan is planned as a service that scans deployed websites with a headless browser, finds accessibility, performance, and SEO issues, and explains how to fix them in plain English.
+- Sign-in and user-owned sites and scans with Clerk.
+- One free scan for each free user. Further scans and paid features require a paid plan.
+- Playwright browser scans with axe-core accessibility checks, Lighthouse metrics, and custom checks.
+- Scan history, issue review, score history, and scan status updates.
+- Saved browser storage state for sites that need an authenticated session.
+- Recurring scheduled scans through BullMQ.
+- PDF report downloads for paid users.
+- Razorpay order verification and webhook signature verification.
+- GitHub Action integration for starting a scan and reporting its result.
+- SSRF protections for private IPs, metadata endpoints, redirects, DNS rebinding, and Lighthouse requests.
 
-> **Project status:** This repository currently contains the initial Next.js web shell. The scanner, worker, database, queue, authentication, and integrations described below are planned architecture, not implemented features.
+Automated results are useful signals, not proof of legal compliance. Keyboard testing, screen-reader testing, real user flows, and professional review are still needed for a complete audit.
 
----
+## How the system is arranged
 
-## The Problem
+```text
+Browser -> Next.js app/API -> PostgreSQL
+                         -> Redis/BullMQ -> scan worker
+                                               -> Playwright + axe-core + Lighthouse
+```
 
-- **Vibe coders** ship fast with AI tools but deploy inaccessible, slow code.
-- **Small businesses** get hit with accessibility lawsuits they never saw coming.
-- **Manual audits** cost $5,000–$20,000+ and don't stay fixed.
-- **Free tools** (axe-core, Lighthouse) are engines, not products.
+- **Web app:** dashboard, authentication, route handlers, billing, reports, and webhooks.
+- **Worker:** consumes scan jobs, opens a browser, runs the scan engines, and saves results.
+- **PostgreSQL:** users, sites, scans, issues, schedules, and browser states.
+- **Redis:** queue, retries, rate-limit counters, and repeatable schedule jobs.
 
-## The Solution
+See [docs/04-architecture.md](./docs/04-architecture.md) and [docs/05-pipeline.md](./docs/05-pipeline.md) for the detailed flow.
 
-| For Vibe Coders | For Small Businesses |
-|---|---|
-| GitHub Action that scans every PR | Dashboard with plain-English reports |
-| PR comments with copy-paste fixes | Weekly scheduled scans + email alerts |
-| Score badges for READMEs | PDF reports for legal evidence |
-| Free tier: 1 site, 3 scans/month | Free for nonprofits |
+## Local setup
 
----
+### Requirements
 
-## Features
+- Node.js 20 or newer
+- npm
+- PostgreSQL (Neon works) and Redis
+- A Clerk application
+- Razorpay credentials if payment flows are being tested
 
-- 🔍 **Headless scanning** — Playwright + Chromium, real rendering, no static analysis
-- ♿ **Accessibility** — axe-core, WCAG 2.2 AA rules
-- ⚡ **Performance** — Lighthouse metrics (LCP, CLS, TBT, FCP, SI)
-- 🔎 **SEO & Best Practices** — meta tags, mobile, crawlability
-- 📋 **Custom rules** — legal checks, tap targets, broken links
-- 💡 **Plain-English fixes** — templates + AI-powered suggestions
-- 🔗 **GitHub Action** — scan every PR, comment results
-- 📧 **Scheduled scans** — weekly monitoring with email alerts
-- 📄 **PDF reports** — legal evidence + trend history
-- 🏅 **Badges** — embeddable score for READMEs and websites
-
----
-
-## Quick Start (Current Repository)
-
-### Prerequisites
-
-- Node.js 20+
-- npm, pnpm, or another Node.js package manager
-
-### Setup
+### Install and configure
 
 ```bash
-# Clone
-git clone https://github.com/accessiscan/accessiscan.git
-cd accessiscan
-
-# Install dependencies
 npm install
+cp .env.example .env
+npm run db:generate
+npm run db:push
+```
 
-# Start the Next.js development server
+Fill in `.env` before starting the app. The full variable list is documented in [docs/07-configuration.md](./docs/07-configuration.md). Never commit `.env` or real secrets.
+
+For local Redis, use Docker: `npm run redis:up`.
+
+### Run the app and worker
+
+Use two terminals:
+
+```bash
+# terminal 1
 npm run dev
+
+# terminal 2
+npm run worker
 ```
 
-The current app is available at http://localhost:3000.
+Open http://localhost:3000, sign in, and start a scan. The worker must be running for a queued scan to finish.
 
-Scanning is not implemented in the current repository yet.
+## Commands
 
----
-
-## Architecture
-
-```
-Client → Web App → Queue → Worker → Browser → Scan → Store → Notify
-```
-
-| Component | Tech | Host |
-|---|---|---|
-| Web App | Next.js 16 + React 19 | Vercel |
-| Worker | Node.js + Playwright | Railway |
-| Queue | Redis + BullMQ | Upstash |
-| Database | PostgreSQL + Prisma | Neon |
-| Storage | Cloudflare R2 | R2 |
-| GitHub Action | Node.js | GitHub |
-
-See [`docs/04-architecture.md`](./docs/04-architecture.md) for the full picture.
-
----
-
-## Tech Stack
-
-**Language:** TypeScript everywhere — frontend, backend, worker, action.
-
-**Core:**
-- Next.js 16, React 19, Tailwind CSS, shadcn/ui
-- Node.js worker, BullMQ
-- PostgreSQL, Prisma
-- Playwright, axe-core, Lighthouse
-- Clerk (auth), Resend (email), Stripe (payments)
-
-See [`docs/02-stack.md`](./docs/02-stack.md) for the full stack.
-
----
-
-## Planned Project Structure
-
-```
-accessiscan/
-├── apps/
-│   ├── web/          # Next.js dashboard + API
-│   ├── worker/       # Scan worker (Playwright + BullMQ)
-│   └── action/       # GitHub Action
-├── packages/
-│   ├── db/           # Prisma schema + client
-│   ├── scanner/      # axe-core + Lighthouse logic
-│   ├── fixes/        # Fix generation (templates + AI)
-│   ├── types/        # Shared TypeScript types
-│   └── ui/           # Shared UI components
-├── docs/             # Project documentation
-└── docker-compose.yml
-```
-
----
-
-## Documentation
-
-| Doc | What's Inside |
+| Command | Purpose |
 |---|---|
-| [01-problem.md](./docs/01-problem.md) | Problem statement, target users, why now |
-| [02-stack.md](./docs/02-stack.md) | Full stack, third parties, libraries |
-| [03-tradeoffs.md](./docs/03-tradeoffs.md) | Every technical decision + tradeoff |
-| [04-architecture.md](./docs/04-architecture.md) | System structure, data model, boundaries |
-| [05-pipeline.md](./docs/05-pipeline.md) | End-to-end scan flow |
-| [06-roadmap.md](./docs/06-roadmap.md) | Phase-wise build plan |
+| `npm run dev` | Start the development web server |
+| `npm run worker` | Start the BullMQ scan worker |
+| `npm run lint` | Run ESLint |
+| `npm run typecheck` | Run TypeScript without emitting files |
+| `npm test` | Run unit and security tests |
+| `npm run build` | Create the production Next.js build |
+| `npm run start` | Start the production web server |
+| `npm run db:generate` | Generate the Prisma client |
+| `npm run db:push` | Apply the current Prisma schema to a database |
+| `npm run db:studio` | Open Prisma Studio |
+| `npm run redis:up` | Start local Redis |
+| `npm run redis:down` | Stop local Redis |
 
----
+## Plans and access
+
+Free users can use one scan. Paid plans can run additional scans and use paid features such as scheduling, browser states, and PDF reports. The scan route reserves the free entitlement atomically, so two simultaneous requests cannot spend the same free scan twice. A failed request releases the reservation.
+
+The exact limits are defined in [lib/plan-limits.ts](./lib/plan-limits.ts). Keep dashboard copy and plan configuration in sync when changing limits.
 
 ## GitHub Action
 
-Add the following workflow after setting `ACCESSISCAN_API_KEY` in repository secrets:
+The action lives in `.github/actions/accessiscan`. It needs an API key and a target URL. Store the key in repository Actions secrets; never place it in workflow source. The action is an integration boundary and should use a user-owned, revocable key before public release.
 
-```yaml
-name: AccessiScan
-on:
-  pull_request:
-    branches: [main]
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./\.github/actions/accessiscan
-        with:
-          api-key: ${{ secrets.ACCESSISCAN_API_KEY }}
-          url: ${{ github.event.deployment_status.target_url }}
-          comment-on-pr: true
-          fail-on-severity: critical
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-```
+## Testing and CI
 
-**Outputs:** `score`, `issues-count`, `report-url`
+Tests are in `tests/` and use Node's built-in test runner through `tsx`. They cover URL/SSRF rules, IPv4-mapped IPv6 handling, signature comparison, and plan entitlements. GitHub Actions runs lint, type-checking, tests, and the production build for every push to `main` and every pull request.
 
----
-
-## Pricing
-
-| Plan | Price | Sites | Scans/mo | Features |
-|---|---|---|---|---|
-| **Free** | $0 | 1 | 3 | Basic score, no scheduling |
-| **Indie** | $9/mo | 5 | 100 | GitHub Action, weekly scans, badges |
-| **Business** | $29/mo | 10 | 1000 | Daily scans, PDF reports, email alerts |
-| **Agency** | $99/mo | Unlimited | 10000 | White-label, API, team seats |
-
-**Nonprofits:** Business plan free forever.
-
----
-
-## Development (Current Repository)
+Run the same checks locally with:
 
 ```bash
-npm run dev        # Start the Next.js development server
-npm run build      # Build the Next.js app
-npm run start      # Start the production server
-npm run lint       # Run ESLint
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
-The scanner-specific commands below are planned and will become available after the monorepo packages are added.
+## Documentation map
 
-### Planned scan rule workflow
-
-1. Add rule to `packages/scanner/src/custom-rules.ts`
-2. Add fix template to `packages/fixes/src/templates.ts`
-3. Add test in `packages/scanner/tests/`
-4. Update `docs/05-pipeline.md` if flow changes
-
----
+- [01-problem.md](./docs/01-problem.md) — product scope and safety limits
+- [02-stack.md](./docs/02-stack.md) — technologies actually used
+- [03-tradeoffs.md](./docs/03-tradeoffs.md) — important design decisions
+- [04-architecture.md](./docs/04-architecture.md) — components, ownership, and data boundaries
+- [05-pipeline.md](./docs/05-pipeline.md) — a scan from request to result
+- [06-roadmap.md](./docs/06-roadmap.md) — completed work and next work
+- [07-configuration.md](./docs/07-configuration.md) — environment variables and deployment settings
 
 ## Contributing
 
-Contributions welcome. Please:
+1. Create a branch from `main`.
+2. Make a focused change.
+3. Run lint, type-checking, tests, and the build.
+4. Update the relevant documentation.
+5. Open a pull request and explain the user-visible change.
 
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feat/amazing-feature`)
-3. Commit with conventional commits (`feat:`, `fix:`, `docs:`)
-4. Push and open a PR
-5. Ensure CI passes
-
-Contribution guidance will be added when the implementation packages are introduced.
-
----
-
-## Roadmap
-
-- [x] Initial Next.js web shell
-- [ ] MVP — manual scan + dashboard
-- [ ] GitHub Action on Marketplace
-- [ ] Paid tiers (Stripe + Razorpay)
-- [ ] Scheduled scans + email reports
-- [ ] PDF generation
-- [ ] Badge system
-- [ ] VS Code extension
-- [ ] Browser extension
-- [ ] AI-powered fix suggestions
-- [ ] Multi-region deployment
-
-See [docs/06-roadmap.md](./docs/06-roadmap.md) for details.
-
----
+Do not commit secrets, production data, generated `.next` files, or local `.env` files.
 
 ## License
 
 MIT © AccessiScan
-
----
-
-## Acknowledgments
-
-Built with [Playwright](https://playwright.dev), [axe-core](https://github.com/dequelabs/axe-core), [Lighthouse](https://developer.chrome.com/docs/lighthouse), and [Next.js](https://nextjs.org).
-
----
-
-**Ship fast. Don't break accessibility.**

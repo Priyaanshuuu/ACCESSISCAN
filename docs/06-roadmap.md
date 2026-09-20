@@ -1,153 +1,38 @@
-Step 15: Add Authentication and User Accounts
-Add ownership and privacy.
+# Roadmap and project status
 
-Add authentication
-Associate scans with users
-Add protected dashboard routes
-Add user-owned sites
-Prevent users from viewing other users’ scans
-Result: The product supports real user accounts safely.
+This file separates work that already exists from work that still needs product or operational decisions.
 
-Step 16: Add Site Dashboard and Scan History
-Organize repeated usage.
+## Complete
 
-Add saved sites
-Add scan history
-Add latest score
-Add score trends
-Add “scan again” action
-Add delete-site behavior
-Result: Users can continuously monitor their websites.
+- Clerk authentication and user-owned sites, scans, issues, and browser states.
+- One free scan per free user with an atomic entitlement reservation.
+- Paid-plan checks for schedules, browser states, and PDF reports.
+- Playwright, axe-core, Lighthouse, and custom scan processing.
+- BullMQ retries and recurring schedule jobs.
+- Razorpay order verification and webhook signature verification.
+- Historical issue integrity: a later scan does not rewrite old scan results.
+- SSRF protection for URL validation, redirects, DNS rebinding, private addresses, and Lighthouse traffic.
+- Lint, type-checking, unit/security tests, and production build checks in GitHub Actions.
+- Plain-language setup, configuration, architecture, and pipeline documentation.
 
-Step 17: Add GitHub Action
-Support the developer workflow.
+## Next production-readiness work
 
-Create the GitHub Action package
-Accept API key and URL
-Start a scan
-Wait for completion
-Post a pull-request comment
-Optionally fail the check based on severity
-Result: Developers can scan websites from CI/CD.
+1. Create a reviewed Prisma migration baseline and deploy migrations safely.
+2. Replace the global GitHub Action key with user-owned, revocable, repository-scoped keys.
+3. Add end-to-end tests for authenticated scans, payment webhooks, schedules, and report access.
+4. Decide whether paid access is a one-time purchase or a recurring subscription, then implement expiry, cancellation, and downgrade rules accordingly.
+5. Add structured logs, error monitoring, queue health checks, worker heartbeats, and alerts.
+6. Add account deletion, scan retention, data export, and secret-rotation runbooks.
+7. Review Prisma and other dependency advisories before upgrading major versions.
 
-## Step 17.5: Secure and Harden the Scan Boundary
+## Later product improvements
 
-Complete this before exposing the API or GitHub Action publicly.
+- Scan cancellation and clearer partial-result states.
+- Same-origin multi-page crawling with explicit page limits.
+- Mobile viewport and keyboard-flow checks.
+- Scan comparison and issue suppression/false-positive review.
+- API documentation and integration examples.
+- Badges, richer GitHub comments, and team/organization support.
+- Manual review workflows for keyboard, screen-reader, and authenticated user flows.
 
-Add SSRF protection for loopback, private, link-local, IPv6, and cloud-metadata addresses
-Revalidate every redirect destination
-Add per-user and per-API-key rate limits
-Add scan quotas and maximum concurrent scans
-Add API-key rotation and revocation
-Scope API keys to a user, repository, or organization
-Add request audit logging
-Add maximum scan duration and cancellation handling
-Add worker heartbeats and stalled-job recovery
-Add dead-letter queue visibility and retry controls
-Add duplicate-scan/idempotency protection
-Result: Untrusted URLs and integrations cannot exhaust or access internal resources.
-
-Step 18: Add Scheduling and Email Notifications
-Support ongoing monitoring.
-
-Add scheduled scans
-Add repeatable queue jobs
-Add email notifications
-Notify on new or worsened issues
-Add notification preferences
-Add notification deduplication and unsubscribe handling
-Add issue regression detection between scans
-Add issue resolution tracking
-Result: Users no longer need to manually start every scan.
-
-Step 19: Add Reports and Billing
-Add business features after the core workflow is stable.
-
-Generate PDF reports
-Add report downloads
-Add plan limits
-Add usage tracking
-Add Stripe billing
-Add nonprofit handling
-Add plan-based scan quotas
-Add plan-based worker concurrency limits
-Add billing webhook handling
-Add payment failure and subscription cancellation handling
-Result: The product is ready for paid usage.
-
-Step 20: Deploy and Harden
-Prepare for production.
-
-Deploy the web app
-Deploy the worker
-Configure managed PostgreSQL and Redis
-Configure object storage if reports or screenshots are enabled
-Add logging and error monitoring
-Add backups
-Add database migration deployment workflow
-Add Redis persistence and recovery policy
-Add worker autoscaling policy
-Add queue and database health endpoints
-Add structured logs with request, scan, job, and user identifiers
-Add alerting for failed scans, queue backlog, and worker crashes
-Add secret rotation procedure
-Add dependency and container vulnerability scanning
-Add authentication and authorization review
-Add API-key abuse monitoring
-Test SSRF protection
-Test rate limits
-Test DNS rebinding and redirect handling
-Test worker crash recovery
-Test duplicate jobs and retry behavior
-Test authenticated and unauthorized scan access
-Test GitHub Action permissions and comment behavior
-Add CI checks
-Run production smoke tests
-Result: The system is ready for real users.
-
-## Step 21: Expand Scanner Coverage
-
-Move beyond the current single rendered-page audit.
-
-Add same-origin multi-page crawling
-Add crawl limits and robots policy controls
-Add authenticated scan sessions
-Add mobile viewport and touch-target scans
-Add keyboard-flow checks
-Add screen-reader/manual review workflow
-Add PDF accessibility scanning
-Add authenticated user-flow recording
-Add cross-scan issue deduplication
-Add false-positive review and suppression
-Add confidence labels for automated findings
-Document that automated results do not establish legal compliance
-Result: The product provides broader evidence while clearly separating automation from manual accessibility review.
-
-## Step 22: Product Reliability and Operations
-
-Make repeated use safe and understandable.
-
-Add scan cancellation from the dashboard
-Add live worker/queue status
-Add scan timeout explanations
-Add partial-result handling when one engine fails
-Add scan retention and user data deletion
-Add account deletion cleanup
-Add dashboard pagination and filtering
-Add site rename/edit controls
-Add scan comparison views
-Add API documentation and integration examples
-Add production runbooks and incident procedures
-Result: Users and operators can understand, control, and recover from scan failures.
-
-
-//   1. Plan entitlement enforcement — limits for sites, monthly scans, schedules, reports, and GitHub Action access are not enforced.
-  2. Subscription lifecycle — Razorpay uses one-time orders, not recurring subscriptions, renewal, expiry, cancellation, or downgrades.
-  3. Worker isolation — Lighthouse runs arbitrary sites with Chromium sandboxing disabled and outside Playwright’s request filter.
-  4. Manual browser handoff — the UI promises a secure MFA/CAPTCHA handoff, but the worker cannot actually perform one.
-  5. Historic-report integrity — later scans modify old issues to “resolved,” changing historical evidence.
-  6. Database/testing readiness — no migrations or automated test suite.
-  7. Dependency remediation — npm audit reports four high-severity Prisma-transitive findings; its proposed fix needs compatibility review.
-  8. Documentation/configuration drift — README, metadata, pricing, and .env.example do not match the implemented product.
-
-  //
+Automated scanning should remain clearly labeled as an aid, not a legal-compliance certificate.

@@ -2,22 +2,20 @@
 
 Every technical choice is a tradeoff. This doc explains what we chose, what we gave up, and why.
 
-## 1. Monorepo vs Polyrepo
+## 1. Single application repository
 
-**Chose:** Monorepo with Turborepo + pnpm workspaces.
+**Chose:** Keep the Next.js app, worker, and GitHub Action definition in one repository without a workspace tool.
 
 **Why:**
-- Shared types (`packages/types`) across web, worker, action
-- Shared scanning logic (`packages/scanner`) reused everywhere
-- Single CI/CD pipeline
-- Atomic commits across packages
+- The current product has one web app and one worker, not several independently versioned packages.
+- A simple npm install and simple CI job make local setup easier.
+- Shared behavior is kept in `lib/` and documented instead of hidden behind a workspace build.
 
 **Gave up:**
-- Repo size grows
-- Build complexity increases
-- Onboarding requires understanding workspace layout
+- Packages cannot be released independently.
+- A larger team may eventually need workspace boundaries and shared package versioning.
 
-**Verdict:** Worth it. We have 3 deployables sharing code.
+**Verdict:** Keep the repository simple until separate release schedules or multiple consumers justify a workspace migration.
 
 ---
 
