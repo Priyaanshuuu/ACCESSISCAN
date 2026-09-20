@@ -27,6 +27,28 @@ type LighthouseResult = {
   audits?: Record<string, { score: number | null; numericValue?: number; displayValue?: string }>;
 };
 
+type AeoGeoSignals = {
+  aeo: {
+    answerBlockCount: number;
+    faqSchema: boolean;
+    hasMetaDescription: boolean;
+    hasQuestionHeadings: boolean;
+    headingCount: number;
+    howToSchema: boolean;
+    title: string;
+    wordCount: number;
+  };
+  geo: {
+    author: string | null;
+    canonicalUrl: string | null;
+    datePublished: string | null;
+    entityTypes: string[];
+    hasOpenGraph: boolean;
+    sameAsCount: number;
+    structuredDataCount: number;
+  };
+};
+
 const fixTemplates: Record<string, { fix: string; recommendation: string }> = {
   "button-name": {
     fix: "Add visible text or an accessible aria-label that describes the button action.",
@@ -128,6 +150,7 @@ const worker = new Worker<ScanJob>(
       let firstResponseStatus: number | null = null;
       let firstPageTitle = "";
       let firstPageUrl = startUrl.toString();
+      let firstAeoGeoSignals: AeoGeoSignals | null = null;
 
       while (pending.length && visited.size < job.data.maxPages) {
         const next = pending.shift();
@@ -144,6 +167,9 @@ const worker = new Worker<ScanJob>(
           firstResponseStatus = response?.status() ?? null;
           firstPageTitle = pageTitle;
           firstPageUrl = pageUrl;
+        }
+        if (visited.size === 1) {
+          firstAeoGeoSignals = await extractAeoGeoSignals(page);
         }
 
         await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
@@ -277,6 +303,10 @@ const worker = new Worker<ScanJob>(
             seo: pickAudit(audits, "document-title", "meta-description", "http-status-code"),
           },
           lighthouseError,
+          ...(firstAeoGeoSignals ? {
+            aeoSignals: firstAeoGeoSignals.aeo,
+            geoSignals: firstAeoGeoSignals.geo,
+          } : {}),
           lighthouseMetrics: pickAudit(audits, "largest-contentful-paint", "cumulative-layout-shift", "first-contentful-paint", "total-blocking-time"),
           pageTitle: firstPageTitle,
           overallScore: calculateOverallScore(accessibilityScore, performanceScore, seoScore, bestPracticesScore),
@@ -516,4 +546,58 @@ async function inspectKeyboardFlow(page: import("playwright").Page) {
 
 function issueFingerprint(rule: string, target: unknown) {
   return crypto.createHash("sha256").update(`${rule}:${JSON.stringify(target ?? "")}`).digest("hex");
+}
+
+async function extractAeoGeoSignals(page: import("playwright").Page): Promise<AeoGeoSignals> {
+  return page.evaluate(() => {
+    const text = document.body?.innerText || "";
+    const headings = Array.from(document.querySelectorAll("h1, h2, h3"));
+    const headingText = headings.map((heading) => heading.textContent?.trim() || "");
+    const structuredData = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+      .flatMap((script) => {
+        try {
+          const parsed = JSON.parse(script.textContent || "null");
+          return Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          return [];
+        }
+      })
+      .filter(Boolean) as Array<Record<string, unknown>>;
+    const entityTypes = structuredData.flatMap((item) => {
+      const type = item["@type"];
+      return Array.isArray(type) ? type.map(String) : typeof type === "string" ? [type] : [];
+    });
+    const faqSchema = entityTypes.includes("FAQPage");
+    const howToSchema = entityTypes.includes("HowTo");
+    const questionPattern = /^(what|why|how|when|where|can|is|are|should|does|do)\\b/i;
+    const questionHeadings = headingText.some((heading) => questionPattern.test(heading));
+    const answerBlockCount = document.querySelectorAll("article, main section, [itemprop='acceptedAnswer'], .faq, [class*='faq']").length;
+    const canonical = document.querySelector('link[rel="canonical"]')?.getAttribute("href") || null;
+    const author = document.querySelector('meta[name="author"], [rel="author"], [itemprop="author"]')?.getAttribute("content") || document.querySelector('[rel="author"], [itemprop="author"]')?.textContent?.trim() || null;
+    const datePublished = document.querySelector('meta[property="article:published_time"], [itemprop="datePublished"]')?.getAttribute("content") || null;
+    const sameAsCount = structuredData.reduce((count, item) => count + (Array.isArray(item.sameAs) ? item.sameAs.length : 0), 0);
+    const hasOpenGraph = Boolean(document.querySelector('meta[property^="og:"]'));
+
+    return {
+      aeo: {
+        answerBlockCount,
+        faqSchema,
+        hasMetaDescription: Boolean(document.querySelector('meta[name="description"]')?.getAttribute("content")?.trim()),
+        hasQuestionHeadings: questionHeadings,
+        headingCount: headings.length,
+        howToSchema,
+        title: document.title,
+        wordCount: text.trim().split(/\\s+/).filter(Boolean).length,
+      },
+      geo: {
+        author,
+        canonicalUrl: canonical,
+        datePublished,
+        entityTypes: [...new Set(entityTypes)],
+        hasOpenGraph,
+        sameAsCount,
+        structuredDataCount: structuredData.length,
+      },
+    };
+  });
 }

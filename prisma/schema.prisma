@@ -50,6 +50,8 @@ model Scan {
   lighthouseMetrics Json?
   lighthouseAudits  Json?
   lighthouseError   String?
+  aeoSignals        Json?
+  geoSignals        Json?
   failureReason     String?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt

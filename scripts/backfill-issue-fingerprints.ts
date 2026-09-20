@@ -3,9 +3,7 @@ import crypto from "node:crypto";
 import { prisma } from "../lib/prisma";
 
 async function main() {
-  const issues = await prisma.issue.findMany({
-    where: { fingerprint: null },
-  });
+  const issues = await prisma.issue.findMany();
 
   for (const issue of issues) {
     const target = Array.isArray(issue.targets) && issue.targets.length > 0 ? issue.targets[0] : "";

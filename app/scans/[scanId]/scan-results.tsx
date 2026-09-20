@@ -84,6 +84,8 @@ type ScanData = {
   lighthouseAudits: unknown;
   lighthouseError: string | null;
   lighthouseMetrics: unknown;
+  aeoSignals: unknown;
+  geoSignals: unknown;
   overallScore: number | null;
   pageTitle: string | null;
   performanceScore: number | null;
@@ -248,6 +250,8 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
   const metrics = getRecord(scan.lighthouseMetrics);
   const audits = getRecord(scan.lighthouseAudits);
   const seoAudits = getRecord(audits.seo);
+  const aeo = getRecord(scan.aeoSignals);
+  const geo = getRecord(scan.geoSignals);
   const reviewedCount = scan.issues.filter((issue) => issue.reviewStatus !== "not_reviewed").length;
 
   return (
@@ -321,6 +325,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
           <TabsTrigger value="accessibility">Accessibility</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
+          <TabsTrigger value="aeo-geo">AEO + GEO</TabsTrigger>
         </TabsList>
 
         <TabsContent className="mt-5" value="accessibility">
@@ -449,6 +454,41 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                   ))}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent className="mt-5" value="aeo-geo">
+          <Card className="border-[#d0ddca] bg-white">
+            <CardHeader className="p-6 sm:p-8">
+              <CardTitle className="text-xl text-[#19382d]">AEO and GEO readiness</CardTitle>
+              <CardDescription>Explainable content signals from the rendered starting page. These signals do not guarantee search or AI visibility.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-6 p-6 pt-0 sm:grid-cols-2 sm:p-8 sm:pt-0">
+              <div className="space-y-3">
+                <h3 className="font-semibold text-[#19382d]">Answer Engine Optimization</h3>
+                <div className="space-y-2 text-sm text-[#5d6b62]">
+                  <p>Title: {String(aeo.title || "-")}</p>
+                  <p>Word count: {String(aeo.wordCount ?? "-")}</p>
+                  <p>Heading count: {String(aeo.headingCount ?? "-")}</p>
+                  <p>Question headings: {aeo.hasQuestionHeadings ? "Detected" : "Not detected"}</p>
+                  <p>FAQ schema: {aeo.faqSchema ? "Detected" : "Not detected"}</p>
+                  <p>HowTo schema: {aeo.howToSchema ? "Detected" : "Not detected"}</p>
+                  <p>Answer/content blocks: {String(aeo.answerBlockCount ?? "-")}</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h3 className="font-semibold text-[#19382d]">Generative Optimization</h3>
+                <div className="space-y-2 text-sm text-[#5d6b62]">
+                  <p>Structured data blocks: {String(geo.structuredDataCount ?? "-")}</p>
+                  <p>Entity types: {Array.isArray(geo.entityTypes) && geo.entityTypes.length ? geo.entityTypes.join(", ") : "Not detected"}</p>
+                  <p>Author: {String(geo.author || "Not detected")}</p>
+                  <p>Published date: {String(geo.datePublished || "Not detected")}</p>
+                  <p>Canonical URL: {String(geo.canonicalUrl || "Not detected")}</p>
+                  <p>Open Graph metadata: {geo.hasOpenGraph ? "Detected" : "Not detected"}</p>
+                  <p>sameAs references: {String(geo.sameAsCount ?? "-")}</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

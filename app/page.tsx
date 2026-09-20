@@ -141,7 +141,7 @@ export default function Home() {
               {browserStates.length > 0 && (
                 <div className="mt-4 space-y-2">
                   <label className="block text-sm font-semibold text-[#19382d]" htmlFor="browser-state">Authenticated session</label>
-                  <Select value={browserStateId} onValueChange={setBrowserStateId}>
+                  <Select value={browserStateId} onValueChange={(value) => setBrowserStateId(value ?? "none")}>
                     <SelectTrigger className="w-full bg-white" id="browser-state"><SelectValue placeholder="Scan as public visitor" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Public visitor</SelectItem>
