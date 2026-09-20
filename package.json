@@ -31,6 +31,7 @@
     "lighthouse": "^13.4.1",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",
+    "pdfjs-dist": "^6.3.289",
     "pdfkit": "^0.20.2",
     "pg": "^8.23.0",
     "playwright": "^1.63.0",

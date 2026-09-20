@@ -110,6 +110,11 @@ const worker = new Worker<ScanJob>(
 
     await assertPublicUrl(job.data.url);
 
+    if (new URL(job.data.url).pathname.toLowerCase().endsWith(".pdf")) {
+      await processPdfScan(scan.id, job.data.url, job.data.maxPages);
+      return { scanId: scan.id, status: "completed" };
+    }
+
     const startedAt = Date.now();
     const browser = await chromium.launch({ headless: true });
     const browserState = job.data.browserStateId
@@ -599,5 +604,69 @@ async function extractAeoGeoSignals(page: import("playwright").Page): Promise<Ae
         structuredDataCount: structuredData.length,
       },
     };
+  });
+}
+
+async function processPdfScan(scanId: string, url: string, maxPages: number) {
+  const response = await fetch(url, { redirect: "manual" });
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get("location");
+    if (!location) throw new Error("PDF redirect did not include a destination.");
+    await assertPublicUrl(new URL(location, url).toString());
+    return processPdfScan(scanId, new URL(location, url).toString(), maxPages);
+  }
+  if (!response.ok) throw new Error(`PDF request failed with HTTP ${response.status}.`);
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/pdf") && !url.toLowerCase().endsWith(".pdf")) {
+    throw new Error("The submitted URL is not a PDF.");
+  }
+
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  if (contentLength > 25 * 1024 * 1024) throw new Error("PDF exceeds the 25 MB scan limit.");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > 25 * 1024 * 1024) throw new Error("PDF exceeds the 25 MB scan limit.");
+
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const document = await pdfjs.getDocument({ data: bytes }).promise;
+  const metadata = await document.getMetadata().catch(() => ({ info: {}, metadata: null }));
+  let text = "";
+  const pageCount = Math.min(document.numPages, Math.max(maxPages, 1));
+  for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    text += content.items.map((item) => ("str" in item ? item.str : "")).join(" ") + "\n";
+  }
+
+  const info = (metadata.info || {}) as Record<string, unknown>;
+  const pdfSignals = {
+    hasAuthor: typeof info.Author === "string" && info.Author.length > 0,
+    hasTitle: typeof info.Title === "string" && info.Title.length > 0,
+    isTagged: Boolean((info as { Marked?: boolean }).Marked),
+    pageCount: document.numPages,
+    scannedPages: pageCount,
+    textCharacterCount: text.trim().length,
+    textPageRatio: text.trim().length > 0 ? 1 : 0,
+  };
+
+  await prisma.scanPage.create({
+    data: {
+      depth: 0,
+      issueCount: pdfSignals.isTagged && pdfSignals.textCharacterCount > 0 ? 0 : 1,
+      scanId,
+      status: "COMPLETED",
+      url,
+    },
+  });
+  await prisma.scan.update({
+    data: {
+      completedAt: new Date(),
+      finalUrl: url,
+      httpStatus: response.status,
+      pageTitle: typeof info.Title === "string" ? info.Title : "PDF document",
+      pdfSignals,
+      status: "COMPLETED",
+    },
+    where: { id: scanId },
   });
 }

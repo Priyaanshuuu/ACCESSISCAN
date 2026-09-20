@@ -86,6 +86,7 @@ type ScanData = {
   lighthouseMetrics: unknown;
   aeoSignals: unknown;
   geoSignals: unknown;
+  pdfSignals: unknown;
   overallScore: number | null;
   pageTitle: string | null;
   performanceScore: number | null;
@@ -326,6 +327,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="seo">SEO</TabsTrigger>
           <TabsTrigger value="aeo-geo">AEO + GEO</TabsTrigger>
+          {scan.pdfSignals && <TabsTrigger value="pdf">PDF</TabsTrigger>}
         </TabsList>
 
         <TabsContent className="mt-5" value="accessibility">
@@ -492,6 +494,25 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {scan.pdfSignals && (
+          <TabsContent className="mt-5" value="pdf">
+            <Card className="border-[#d0ddca] bg-white">
+              <CardHeader className="p-6 sm:p-8">
+                <CardTitle className="text-xl text-[#19382d]">PDF accessibility signals</CardTitle>
+                <CardDescription>Automated PDF structure and text signals. These do not establish PDF/UA compliance.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3 p-6 pt-0 text-sm text-[#5d6b62] sm:grid-cols-2 sm:p-8 sm:pt-0">
+                {Object.entries(getRecord(scan.pdfSignals)).map(([key, value]) => (
+                  <div className="rounded-lg border border-[#e1e8df] p-3" key={key}>
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#89958c]">{key}</p>
+                    <p className="mt-1 font-medium text-[#19382d]">{String(value)}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       <Link className={buttonVariants({ className: "bg-[#19382d] text-white hover:bg-[#285342]" })} href="/">Scan another website</Link>

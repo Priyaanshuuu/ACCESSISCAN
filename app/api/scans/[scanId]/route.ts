@@ -51,6 +51,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       lighthouseError: scan.lighthouseError,
       aeoSignals: scan.aeoSignals,
       geoSignals: scan.geoSignals,
+      pdfSignals: scan.pdfSignals,
       lighthouseMetrics: scan.lighthouseMetrics,
       pageTitle: scan.pageTitle,
       performanceScore: scan.performanceScore,
