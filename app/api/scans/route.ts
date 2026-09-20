@@ -20,22 +20,6 @@ export async function POST(request: Request) {
   }
 
   const identity = user ? `user:${user.id}` : `action:${actionKey}`;
-  const rateLimit = await consumeScanRateLimit(identity, isActionRequest ? 30 : 10);
-  if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { error: "Scan limit reached. Please try again later." },
-      { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
-    );
-  }
-
-  const slot = await reserveScanSlot(identity, 2);
-  if (!slot.allowed) {
-    return NextResponse.json(
-      { error: "Too many scans are already running for this identity." },
-      { headers: { "Retry-After": "60" }, status: 429 },
-    );
-  }
-
   let body: unknown;
 
   try {
@@ -73,6 +57,13 @@ export async function POST(request: Request) {
     );
   }
 
+  let slotReserved = false;
+  async function releaseReservedSlot() {
+    if (!slotReserved) return;
+    slotReserved = false;
+    await releaseScanSlot(identity);
+  }
+
   try {
     const databaseUser = user
       ? await prisma.user.upsert({
@@ -85,9 +76,26 @@ export async function POST(request: Request) {
       ? await prisma.browserState.findFirst({ where: { id: browserStateId, userId: databaseUser.id } })
       : null;
     if (browserStateId && !browserState) {
-      await releaseScanSlot(identity);
       return NextResponse.json({ error: "Browser session not found." }, { status: 404 });
     }
+
+    const rateLimit = await consumeScanRateLimit(identity, isActionRequest ? 30 : 10);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Scan limit reached. Please try again later." },
+        { headers: { "Retry-After": String(rateLimit.retryAfter) }, status: 429 },
+      );
+    }
+
+    const slot = await reserveScanSlot(identity, 2);
+    if (!slot.allowed) {
+      return NextResponse.json(
+        { error: "Too many scans are already running for this identity." },
+        { headers: { "Retry-After": "60" }, status: 429 },
+      );
+    }
+    slotReserved = true;
+
     const limits = planLimits[databaseUser?.plan ?? "FREE"];
     if (databaseUser) {
       const period = new Date().toISOString().slice(0, 7);
@@ -126,7 +134,7 @@ export async function POST(request: Request) {
         url: scan.url,
       });
     } catch {
-      await releaseScanSlot(identity);
+      await releaseReservedSlot();
       await prisma.scan.update({
         data: { status: "FAILED" },
         where: { id: scan.id },
@@ -147,7 +155,7 @@ export async function POST(request: Request) {
       { status: 201 },
     );
   } catch (error) {
-    await releaseScanSlot(identity);
+    await releaseReservedSlot();
     console.error("[api/scans] failed to create scan", {
       code: error instanceof Error && "code" in error ? error.code : undefined,
       message: error instanceof Error ? error.message : "Unknown database error",
