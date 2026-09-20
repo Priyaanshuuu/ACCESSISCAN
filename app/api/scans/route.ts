@@ -88,6 +88,12 @@ export async function POST(request: Request) {
     if (browserStateId && !browserState) {
       return NextResponse.json({ error: "Browser session not found." }, { status: 404 });
     }
+    if (browserState?.requiresManualHandoff || browserState?.kind !== "storage_state") {
+      return NextResponse.json(
+        { error: "Manual browser handoff is not supported. Upload a Playwright storage-state JSON instead." },
+        { status: 409 },
+      );
+    }
 
     const rateLimit = await consumeScanRateLimit(identity, isActionRequest ? 30 : 10);
     if (!rateLimit.allowed) {

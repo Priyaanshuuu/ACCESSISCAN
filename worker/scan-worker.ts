@@ -122,6 +122,9 @@ const worker = new Worker<ScanJob>(
     if (browserState?.expiresAt && browserState.expiresAt < new Date()) {
       throw new Error("The authenticated browser session has expired.");
     }
+    if (browserState?.requiresManualHandoff || browserState?.kind !== "storage_state") {
+      throw new Error("Manual browser handoff is not supported. Upload a Playwright storage-state JSON instead.");
+    }
     const browser = await chromium.launch({ headless: true });
 
     try {
@@ -471,7 +474,7 @@ async function runLighthouse(url: string) {
       "--output=json",
       "--output-path=stdout",
       "--only-categories=performance,seo,best-practices",
-      "--chrome-flags=--headless --no-sandbox --disable-dev-shm-usage",
+      "--chrome-flags=--headless --disable-dev-shm-usage",
       "--quiet",
     ],
     { maxBuffer: 25 * 1024 * 1024 },

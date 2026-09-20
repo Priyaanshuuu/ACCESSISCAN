@@ -28,35 +28,12 @@ export async function POST(request: Request) {
   if (!databaseUser) return upgradeRequired();
   const body = (await request.json()) as {
     expiresAt?: string;
-    kind?: "storage_state" | "manual_handoff";
     label?: string;
-    manualNotes?: string;
     state?: unknown;
   };
 
   if (!body.label || body.label.trim().length === 0) {
     return NextResponse.json({ error: "A session label is required." }, { status: 400 });
-  }
-
-  const kind = body.kind === "manual_handoff" ? "manual_handoff" : "storage_state";
-
-  if (kind === "manual_handoff") {
-    const state = await prisma.browserState.create({
-      data: {
-        ciphertext: encryptBrowserState({
-          manualHandoff: true,
-          notes: body.manualNotes || "Manual secure handoff required for MFA/CAPTCHA-protected flow.",
-        }),
-        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
-        kind,
-        label: body.label.slice(0, 100),
-        manualNotes: body.manualNotes?.slice(0, 2000) || "Manual secure handoff required for MFA/CAPTCHA-protected flow.",
-        requiresManualHandoff: true,
-        userId: databaseUser.id,
-      },
-      select: { createdAt: true, expiresAt: true, id: true, kind: true, label: true, manualNotes: true, requiresManualHandoff: true },
-    });
-    return NextResponse.json({ state }, { status: 201 });
   }
 
   if (!body.state || typeof body.state !== "object") {
@@ -71,9 +48,9 @@ export async function POST(request: Request) {
 
   const state = await prisma.browserState.create({
     data: {
-      ciphertext: encryptBrowserState(body.state),
-      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
-      kind,
+        ciphertext: encryptBrowserState(body.state),
+        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+        kind: "storage_state",
       label: body.label.slice(0, 100),
       userId: databaseUser.id,
     },
