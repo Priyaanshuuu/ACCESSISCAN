@@ -249,7 +249,6 @@ const worker = new Worker<ScanJob>(
           })
         : null;
       const previousFingerprints = new Set(previousScan?.issues.map((issue) => issue.fingerprint));
-      const currentFingerprints = new Set(issueFingerprints.keys());
       const issueData = [...issueFingerprints.entries()].map(([fingerprint, entry]) => ({
         description: entry.violation.description,
             confidence: highConfidenceRules.has(entry.violation.id) ? "high" : "medium",
@@ -321,15 +320,6 @@ const worker = new Worker<ScanJob>(
         },
         where: { id: scan.id },
       });
-      if (previousScan) {
-        const resolvedIssues = previousScan.issues.filter((issue) => !currentFingerprints.has(issue.fingerprint));
-        if (resolvedIssues.length) {
-          await prisma.issue.updateMany({
-            data: { lifecycle: "resolved", lastSeenAt: new Date() },
-            where: { id: { in: resolvedIssues.map((issue) => issue.id) } },
-          });
-        }
-      }
     } finally {
       await browser.close();
     }
