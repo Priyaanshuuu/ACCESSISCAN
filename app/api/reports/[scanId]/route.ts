@@ -2,6 +2,8 @@ import PDFDocument from "pdfkit";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+import { readAeoGeoReport } from "@/lib/aeo-geo";
+import { appendAeoGeoPdf } from "@/lib/aeo-geo-pdf";
 import { prisma } from "@/lib/prisma";
 import { hasScanAccess } from "@/lib/billing";
 
@@ -47,6 +49,9 @@ export async function GET(request: Request, { params }: Props) {
       if (issue.fix) document.text(`Suggested fix: ${issue.fix}`);
     }
   }
+
+  const aeoGeoReport = readAeoGeoReport(scan.aeoSignals);
+  if (aeoGeoReport) appendAeoGeoPdf(document, aeoGeoReport);
 
   document.end();
   const buffer = await completed;

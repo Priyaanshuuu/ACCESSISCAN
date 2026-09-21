@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { AeoGeoReportView } from "@/components/aeo-geo-report";
+import { readAeoGeoReport } from "@/lib/aeo-geo";
 import { useEffect, useState } from "react";
 
 import {
@@ -253,6 +255,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
   const metrics = getRecord(scan.lighthouseMetrics);
   const audits = getRecord(scan.lighthouseAudits);
   const seoAudits = getRecord(audits.seo);
+  const aeoGeoReport = readAeoGeoReport(scan.aeoSignals);
   const aeo = getRecord(scan.aeoSignals);
   const geo = getRecord(scan.geoSignals);
   const pdfSignals = getRecord(scan.pdfSignals);
@@ -465,7 +468,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
         </TabsContent>
 
         <TabsContent className="mt-5" value="aeo-geo">
-          <Card className="border-[#d0ddca] bg-white">
+          {aeoGeoReport ? <AeoGeoReportView report={aeoGeoReport} /> : <Card className="border-[#d0ddca] bg-white">
             <CardHeader className="p-6 sm:p-8">
               <CardTitle className="text-xl text-[#19382d]">AEO and GEO readiness</CardTitle>
               <CardDescription>Explainable content signals from the rendered starting page. These signals do not guarantee search or AI visibility.</CardDescription>
@@ -496,7 +499,7 @@ export function ScanResults({ initialUrl, scanId }: ScanResultsProps) {
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card>}
         </TabsContent>
 
         {hasPdfSignals && (

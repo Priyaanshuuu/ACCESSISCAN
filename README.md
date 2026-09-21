@@ -8,6 +8,7 @@ AccessiScan scans a deployed website and explains accessibility, performance, SE
 - One free scan per account, then scan access for INR 100/month (10 pages per scan, depth 2). Email scheduling is purchased independently for INR 250/month.
 - Playwright browser scans with axe-core accessibility checks, Lighthouse metrics, and custom checks.
 - Scan history, issue review, score history, and scan status updates.
+- AEO/GEO structural analysis across crawled pages, duplicate metadata detection, and optional OpenAI content recommendations with page evidence. See [AI setup](./docs/07-configuration.md#aeogeo-analysis).
 - Saved browser storage state for sites that need an authenticated session.
 - Recurring scheduled scans through BullMQ.
 - PDF report downloads for paid users.

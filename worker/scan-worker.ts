@@ -11,6 +11,9 @@ import { Worker } from "bullmq";
 import { chromium } from "playwright";
 import { Resend } from "resend";
 
+import { analysePage, buildAeoGeoReport, type AnalysedPage } from "@/lib/aeo-geo";
+import { extractAeoGeoSignals } from "@/lib/aeo-geo-extract";
+import { reviewAeoGeoWithAi } from "@/lib/aeo-geo-ai";
 import { prisma } from "@/lib/prisma";
 import { scanQueue, type ScanJob } from "@/lib/queue";
 import { decryptBrowserState } from "@/lib/browser-state-crypto";
@@ -29,28 +32,6 @@ type AxeWindow = Window & {
 type LighthouseResult = {
   categories?: Record<string, { score: number | null }>;
   audits?: Record<string, { score: number | null; numericValue?: number; displayValue?: string }>;
-};
-
-type AeoGeoSignals = {
-  aeo: {
-    answerBlockCount: number;
-    faqSchema: boolean;
-    hasMetaDescription: boolean;
-    hasQuestionHeadings: boolean;
-    headingCount: number;
-    howToSchema: boolean;
-    title: string;
-    wordCount: number;
-  };
-  geo: {
-    author: string | null;
-    canonicalUrl: string | null;
-    datePublished: string | null;
-    entityTypes: string[];
-    hasOpenGraph: boolean;
-    sameAsCount: number;
-    structuredDataCount: number;
-  };
 };
 
 const fixTemplates: Record<string, { fix: string; recommendation: string }> = {
@@ -143,6 +124,10 @@ const worker = new Worker<ScanJob>(
             await route.continue();
             return;
           }
+          if (route.request().isNavigationRequest() && route.request().frame() === page.mainFrame() && visited.size > 1 && requestUrl.origin !== new URL(firstPageUrl).origin) {
+            await route.abort("blockedbyclient");
+            return;
+          }
           await assertPublicUrl(requestUrl.toString());
           await route.continue();
         } catch {
@@ -155,6 +140,7 @@ const worker = new Worker<ScanJob>(
       await prisma.scanPage.deleteMany({ where: { scanId: scan.id } });
 
       const startUrl = new URL(job.data.url);
+      startUrl.hash = "";
       const pending = [{ depth: 0, url: startUrl.toString() }];
       const visited = new Set<string>();
       const allViolations: AxeResults["violations"] = [];
@@ -162,7 +148,9 @@ const worker = new Worker<ScanJob>(
       let firstResponseStatus: number | null = null;
       let firstPageTitle = "";
       let firstPageUrl = startUrl.toString();
-      let firstAeoGeoSignals: AeoGeoSignals | null = null;
+      const aeoGeoPages: AnalysedPage[] = [];
+      const skippedAeoGeoPages: { url: string; reason: string }[] = [];
+      const finalUrls = new Set<string>();
 
       while (pending.length && visited.size < job.data.maxPages) {
         const next = pending.shift();
@@ -172,16 +160,33 @@ const worker = new Worker<ScanJob>(
         const response = await page.goto(next.url, {
           timeout: 30_000,
           waitUntil: "domcontentloaded",
+        }).catch((error: unknown) => {
+          if (visited.size === 1) throw error;
+          return null;
         });
-        const pageUrl = page.url();
+        if (!response || response.status() >= 400 || !/text\/html|application\/xhtml\+xml/i.test(response.headers()["content-type"] || "")) {
+          if (visited.size === 1) throw new Error("The starting page did not return a successful HTML response.");
+          skippedAeoGeoPages.push({ url: next.url, reason: response ? "HTTP error or non-HTML response." : "Navigation failed, timed out, or left the site." });
+          continue;
+        }
+        const pageUrl = page.url().split("#")[0];
+        if (finalUrls.has(pageUrl)) {
+          skippedAeoGeoPages.push({ url: next.url, reason: "Redirected to an already analysed page." });
+          continue;
+        }
+        finalUrls.add(pageUrl);
         const pageTitle = await page.title();
         if (visited.size === 1) {
           firstResponseStatus = response?.status() ?? null;
           firstPageTitle = pageTitle;
           firstPageUrl = pageUrl;
         }
-        if (visited.size === 1) {
-          firstAeoGeoSignals = await extractAeoGeoSignals(page);
+        try {
+          const signals = await extractAeoGeoSignals(page);
+          signals.robots = [signals.robots, response.headers()["x-robots-tag"] || ""].filter(Boolean).join(", ").slice(0, 2000);
+          aeoGeoPages.push(analysePage(signals));
+        } catch {
+          skippedAeoGeoPages.push({ url: pageUrl, reason: "Content inspection could not complete." });
         }
 
         await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
@@ -234,9 +239,9 @@ const worker = new Worker<ScanJob>(
           for (const link of links) {
             try {
               const linkUrl = new URL(link);
-              if (linkUrl.origin === startUrl.origin && ["http:", "https:"].includes(linkUrl.protocol)) {
+              if (linkUrl.origin === new URL(firstPageUrl).origin && ["http:", "https:"].includes(linkUrl.protocol)) {
                 linkUrl.hash = "";
-                if (!visited.has(linkUrl.toString()) && !pending.some((item) => item.url === linkUrl.toString())) {
+                if (pending.length < 2000 && linkUrl.href.length <= 2048 && !visited.has(linkUrl.toString()) && !finalUrls.has(linkUrl.toString()) && !pending.some((item) => item.url === linkUrl.toString())) {
                   pending.push({ depth: next.depth + 1, url: linkUrl.toString() });
                 }
               }
@@ -247,6 +252,11 @@ const worker = new Worker<ScanJob>(
         }
       }
 
+      const aiReview = await reviewAeoGeoWithAi(aeoGeoPages, { authenticated: Boolean(job.data.browserStateId) });
+      const aeoGeoReport = buildAeoGeoReport(aeoGeoPages, {
+        attempted: visited.size, analysed: aeoGeoPages.length, pageLimit: job.data.maxPages,
+        depthLimit: job.data.maxDepth, remainingLinks: pending.length, skipped: skippedAeoGeoPages,
+      }, aiReview);
       const accessibilityScore = calculateAccessibilityScore(allViolations);
       const previousScan = scan.siteId
         ? await prisma.scan.findFirst({
@@ -314,10 +324,8 @@ const worker = new Worker<ScanJob>(
             seo: pickAudit(audits, "document-title", "meta-description", "http-status-code"),
           },
           lighthouseError,
-          ...(firstAeoGeoSignals ? {
-            aeoSignals: firstAeoGeoSignals.aeo,
-            geoSignals: firstAeoGeoSignals.geo,
-          } : {}),
+          aeoSignals: aeoGeoReport,
+          geoSignals: { version: 2, summary: aeoGeoReport.summary.geo },
           lighthouseMetrics: pickAudit(audits, "largest-contentful-paint", "cumulative-layout-shift", "first-contentful-paint", "total-blocking-time"),
           pageTitle: firstPageTitle,
           overallScore: calculateOverallScore(accessibilityScore, performanceScore, seoScore, bestPracticesScore),
@@ -642,60 +650,6 @@ async function inspectKeyboardFlow(page: import("playwright").Page) {
 
 function issueFingerprint(rule: string, target: unknown) {
   return crypto.createHash("sha256").update(`${rule}:${JSON.stringify(target ?? "")}`).digest("hex");
-}
-
-async function extractAeoGeoSignals(page: import("playwright").Page): Promise<AeoGeoSignals> {
-  return page.evaluate(() => {
-    const text = document.body?.innerText || "";
-    const headings = Array.from(document.querySelectorAll("h1, h2, h3"));
-    const headingText = headings.map((heading) => heading.textContent?.trim() || "");
-    const structuredData = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
-      .flatMap((script) => {
-        try {
-          const parsed = JSON.parse(script.textContent || "null");
-          return Array.isArray(parsed) ? parsed : [parsed];
-        } catch {
-          return [];
-        }
-      })
-      .filter(Boolean) as Array<Record<string, unknown>>;
-    const entityTypes = structuredData.flatMap((item) => {
-      const type = item["@type"];
-      return Array.isArray(type) ? type.map(String) : typeof type === "string" ? [type] : [];
-    });
-    const faqSchema = entityTypes.includes("FAQPage");
-    const howToSchema = entityTypes.includes("HowTo");
-    const questionPattern = /^(what|why|how|when|where|can|is|are|should|does|do)\\b/i;
-    const questionHeadings = headingText.some((heading) => questionPattern.test(heading));
-    const answerBlockCount = document.querySelectorAll("article, main section, [itemprop='acceptedAnswer'], .faq, [class*='faq']").length;
-    const canonical = document.querySelector('link[rel="canonical"]')?.getAttribute("href") || null;
-    const author = document.querySelector('meta[name="author"], [rel="author"], [itemprop="author"]')?.getAttribute("content") || document.querySelector('[rel="author"], [itemprop="author"]')?.textContent?.trim() || null;
-    const datePublished = document.querySelector('meta[property="article:published_time"], [itemprop="datePublished"]')?.getAttribute("content") || null;
-    const sameAsCount = structuredData.reduce((count, item) => count + (Array.isArray(item.sameAs) ? item.sameAs.length : 0), 0);
-    const hasOpenGraph = Boolean(document.querySelector('meta[property^="og:"]'));
-
-    return {
-      aeo: {
-        answerBlockCount,
-        faqSchema,
-        hasMetaDescription: Boolean(document.querySelector('meta[name="description"]')?.getAttribute("content")?.trim()),
-        hasQuestionHeadings: questionHeadings,
-        headingCount: headings.length,
-        howToSchema,
-        title: document.title,
-        wordCount: text.trim().split(/\\s+/).filter(Boolean).length,
-      },
-      geo: {
-        author,
-        canonicalUrl: canonical,
-        datePublished,
-        entityTypes: [...new Set(entityTypes)],
-        hasOpenGraph,
-        sameAsCount,
-        structuredDataCount: structuredData.length,
-      },
-    };
-  });
 }
 
 async function processPdfScan(scanId: string, url: string, maxPages: number) {

@@ -26,8 +26,33 @@ The encryption key must be stable and identical for the web app and worker. Rota
 | `GITHUB_TOKEN` | Server-side GitHub operations, when enabled |
 | `ACCESSISCAN_API_KEY` | GitHub Action authentication; use a user-owned key |
 | `NEXT_PUBLIC_APP_URL` | Canonical app URL used in links and callbacks |
+| `OPENAI_API_KEY` | Server-only OpenAI key used by the scan worker for AEO/GEO content reviews |
+| `OPENAI_AEO_GEO_MODEL` | Responses API model with Structured Outputs support; defaults to `gpt-4.1-mini` |
+| `AEO_GEO_AI_ENABLED` | Set `false` to disable AI review; otherwise enabled when an OpenAI key is configured |
 
 An integration may be unset during local development. The related feature should be unavailable rather than given a fake production secret.
+
+## AEO/GEO analysis
+
+Add the following to the worker's `.env` to enable AI reviews, then restart `npm run worker`:
+
+```dotenv
+OPENAI_API_KEY="your-openai-api-key"
+OPENAI_AEO_GEO_MODEL="gpt-4.1-mini"
+AEO_GEO_AI_ENABLED="true"
+```
+
+The worker analyses every successfully crawled HTML page within the existing page/depth allowance (one page for the free scan, up to ten pages at depth two for the current paid plan). The report records attempted, analysed and skipped pages, plus discovered links left outside the scan. It follows same-origin links from the starting page's final URL, deduplicates redirected pages, and skips navigation failures/non-HTML child pages. It does not discover disconnected pages through sitemaps. Rendering waits up to two seconds for network idle; later content may still be absent.
+
+Rule-based checks work without OpenAI. New reports contain page evidence, applicable check counts, duplicate titles/descriptions, and recommendations. They do not produce ranking or citation scores. FAQ/HowTo, identity references and external links are informational; author/date checks apply to detected articles. JSON-LD is parsed recursively (including `@graph`), but vocabulary validity and factual accuracy are not verified. Page-level robots metadata/headers are inspected; robots.txt and actual engine accessibility are not tested. Question detection recognizes English question prefixes and question marks; whitespace-based word counts are approximate for languages without word separators.
+
+One OpenAI Responses request reviews at most the first ten analysed pages per scan attempt, with at most 6,500 characters of evidence per page, at most 3,500 output tokens and a 45-second timeout. Responses use a strict JSON schema and `store: false`. AI output is checked against supplied URLs and verbatim evidence quotes before display. The provider receives URLs, selected metadata and content excerpts; it receives no cookies or saved browser state. Scans using saved sign-in sessions skip AI entirely. Full text excerpts are not persisted, though short answer examples and evidence quotes remain in the report. OpenAI usage is billed to the configured API account separately from application pricing.
+
+The AI has no browsing tools: it evaluates supplied content and suggests improvements, not live visibility in ChatGPT, AI Overviews, or another engine. Timeouts, missing credentials, refusals and invalid output leave the structural report usable. Existing scans keep the legacy report view; start a new scan to generate enhanced reports. The existing JSON database columns store versioned reports, so no schema migration is needed. Enhanced findings are also included in PDF exports.
+
+API implementation follows the [OpenAI Structured Outputs guide](https://developers.openai.com/api/docs/guides/structured-outputs). A different model can be configured, but it must support the Responses API and strict structured text output.
+
+Run `npm run test` for fixture-based Chromium extraction, report aggregation, and mocked OpenAI success/failure tests. Install the browser with `npx playwright install chromium` if needed. After configuring a real key, scan a public site with linked pages and check the **AEO + GEO** tab: page count, per-page findings, AI evidence links, skipped-page coverage, and the downloaded PDF. This live call consumes API credit.
 
 ## Database workflow
 
