@@ -1,0 +1,16 @@
+FROM node:22-bookworm
+
+WORKDIR /app
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev
+RUN npx playwright install --with-deps chromium && chmod -R a+rX /ms-playwright
+
+COPY . .
+RUN DATABASE_URL=postgresql://generate:generate@localhost:5432/generate npm run db:generate
+
+USER node
+ENV NODE_ENV=production
+ENV CHROME_NO_SANDBOX=1
+CMD ["sh", "-c", "export CHROME_PATH=$(node -e 'process.stdout.write(require(\"playwright\").chromium.executablePath())'); exec ./node_modules/.bin/tsx worker/scan-worker.ts"]

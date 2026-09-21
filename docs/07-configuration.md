@@ -62,6 +62,8 @@ This repository currently uses Prisma `db push`, not a committed migration histo
 
 Deploy the Next.js app and worker as separate processes. Both must use the same database, Redis instance, and browser-state encryption key. The worker needs a host that can run Chromium and long-lived Node.js processes; a serverless-only host is not sufficient for the worker.
 
+For Railway, use the same repository as a separate worker service. Set its `RAILWAY_DOCKERFILE_PATH` variable to `Dockerfile.worker`, remove any custom build/start command so the Dockerfile's `CMD` runs, and do not assign the worker a public domain. The image installs Playwright Chromium plus Linux dependencies at build time and uses the installed full Chromium for Lighthouse. Keep `DATABASE_URL`, `REDIS_URL`, and `BROWSER_STATE_ENCRYPTION_KEY` on this service. Redeploy the worker after changing the Dockerfile; restarting an old image will not install browsers. The web service should keep its normal Next.js build and should not use `Dockerfile.worker`.
+
 ## Secret handling
 
 - Keep `.env` out of Git.

@@ -21,7 +21,7 @@ export async function runLighthouse(url: string): Promise<LighthouseResult> {
     // Own Chrome in the worker, so killing a timed-out CLI cannot leave its browser behind.
     chrome = await launch({
       handleSIGINT: false,
-      chromeFlags: ["--headless", "--disable-dev-shm-usage", `--proxy-server=http://127.0.0.1:${proxy.port}`, "--proxy-bypass-list=<-loopback>"],
+      chromeFlags: ["--headless", "--disable-dev-shm-usage", ...(process.env.CHROME_NO_SANDBOX === "1" ? ["--no-sandbox"] : []), `--proxy-server=http://127.0.0.1:${proxy.port}`, "--proxy-bypass-list=<-loopback>"],
     });
     const { stdout } = await execFileAsync(process.execPath, [
       require.resolve("lighthouse/cli/index.js"), url,
