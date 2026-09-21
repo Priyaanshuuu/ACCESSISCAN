@@ -15,6 +15,8 @@ import { prisma } from "@/lib/prisma";
 import { scanQueue, type ScanJob } from "@/lib/queue";
 import { decryptBrowserState } from "@/lib/browser-state-crypto";
 import { releaseScanSlot } from "@/lib/rate-limit";
+import { hasActiveAccess } from "@/lib/billing";
+import { planLimits } from "@/lib/plan-limits";
 import { scheduleJobId, scheduleQueue, type ScheduledScanJob } from "@/lib/schedule-queue";
 import { assertPublicUrl, resolvePublicHostname } from "@/lib/url-safety";
 
@@ -351,7 +353,7 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
       include: { site: true, user: true },
       where: { id: job.data.scheduleId },
     });
-    if (!schedule || !schedule.enabled) return;
+    if (!schedule || !schedule.enabled || !hasActiveAccess(schedule.user.schedulingAccessUntil)) return;
 
     const scheduler = await scheduleQueue.getJobScheduler(scheduleJobId(schedule.id));
     if (scheduler?.next) {
@@ -364,8 +366,8 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
     const scan = await prisma.scan.create({
       data: {
         id: `scan_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
-        maxDepth: schedule.user.plan === "FREE" ? 0 : schedule.user.plan === "INDIE" ? 2 : schedule.user.plan === "BUSINESS" ? 3 : 5,
-        maxPages: schedule.user.plan === "FREE" ? 1 : schedule.user.plan === "INDIE" ? 10 : schedule.user.plan === "BUSINESS" ? 50 : 250,
+        maxDepth: planLimits.PAID.maxDepth,
+        maxPages: planLimits.PAID.maxPages,
         siteId: schedule.siteId,
         url: schedule.site.url,
         userId: schedule.userId,
@@ -373,8 +375,8 @@ const scheduledWorker = new Worker<ScheduledScanJob>(
     });
     await scanQueue.add("scheduled-scan", {
       identity: `user:${schedule.userId}`,
-      maxDepth: schedule.user.plan === "FREE" ? 0 : schedule.user.plan === "INDIE" ? 2 : schedule.user.plan === "BUSINESS" ? 3 : 5,
-      maxPages: schedule.user.plan === "FREE" ? 1 : schedule.user.plan === "INDIE" ? 10 : schedule.user.plan === "BUSINESS" ? 50 : 250,
+      maxDepth: planLimits.PAID.maxDepth,
+      maxPages: planLimits.PAID.maxPages,
       scanId: scan.id,
       url: scan.url,
     });

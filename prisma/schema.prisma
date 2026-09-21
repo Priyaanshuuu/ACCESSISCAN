@@ -20,9 +20,15 @@ enum ScheduleFrequency {
 
 enum UserPlan {
   FREE
+  PAID
   INDIE
   BUSINESS
   AGENCY
+}
+
+enum PaymentProduct {
+  SCANS
+  SCHEDULING
 }
 
 enum PaymentStatus {
@@ -83,6 +89,8 @@ model User {
   usagePeriods UsagePeriod[]
   plan      UserPlan @default(FREE)
   freeScanUsed Boolean @default(false)
+  scansAccessUntil DateTime?
+  schedulingAccessUntil DateTime?
   payments  Payment[]
   browserStates BrowserState[]
 }
@@ -112,6 +120,7 @@ model Payment {
   providerOrderId   String        @unique
   providerPaymentId String?       @unique
   plan              UserPlan
+  product           PaymentProduct @default(SCANS)
   amountPaise       Int
   currency          String        @default("INR")
   status            PaymentStatus @default(CREATED)

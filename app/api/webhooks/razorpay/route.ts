@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { fulfillPayment } from "@/lib/payment-fulfillment";
 import { matchesHexSignature } from "@/lib/secure-compare";
 
 export async function POST(request: Request) {
@@ -13,16 +14,13 @@ export async function POST(request: Request) {
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   if (!matchesHexSignature(expected, signature)) return NextResponse.json({ error: "Invalid webhook signature." }, { status: 400 });
 
-  const event = JSON.parse(rawBody) as { event?: string; payload?: { payment?: { entity?: { order_id?: string; id?: string } } } };
+  const event = JSON.parse(rawBody) as { event?: string; payload?: { payment?: { entity?: { order_id?: string; id?: string; amount?: number; currency?: string; status?: string } } } };
   if (event.event === "payment.captured") {
     const entity = event.payload?.payment?.entity;
     if (entity?.order_id && entity.id) {
       const payment = await prisma.payment.findUnique({ where: { providerOrderId: entity.order_id } });
-      if (payment) {
-        await prisma.$transaction([
-          prisma.payment.update({ data: { providerPaymentId: entity.id, status: "PAID" }, where: { id: payment.id } }),
-          prisma.user.update({ data: { plan: payment.plan }, where: { id: payment.userId } }),
-        ]);
+      if (payment && entity.status === "captured" && entity.amount === payment.amountPaise && entity.currency === payment.currency) {
+        await fulfillPayment(payment.providerOrderId, entity.id);
       }
     }
   }

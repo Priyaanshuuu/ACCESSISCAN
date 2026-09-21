@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getPaidResource, requestJson } from "../lib/client-api";
+import { getPaidResource, getSchedulingResource, requestJson } from "../lib/client-api";
 
 test("free accounts never request paid schedules or browser states", async (t) => {
   const fetch = t.mock.method(globalThis, "fetch", async () => { throw new Error("Unexpected paid request"); });
-  assert.deepEqual(await getPaidResource("FREE", "/api/schedules", { schedules: [] }), { schedules: [] });
+  assert.deepEqual(await getSchedulingResource(false, "/api/schedules", { schedules: [] }), { schedules: [] });
   assert.deepEqual(await getPaidResource("FREE", "/api/browser-states", { states: [] }), { states: [] });
   assert.equal(fetch.mock.callCount(), 0);
 });
 
-test("paid accounts load protected resources", async (t) => {
+test("scheduling purchasers load schedules independently of scan access", async (t) => {
   const schedules = [{ id: "schedule-1", frequency: "WEEKLY" }];
   t.mock.method(globalThis, "fetch", async () => Response.json({ schedules }));
-  assert.deepEqual(await getPaidResource("INDIE", "/api/schedules", { schedules: [] }), { schedules });
+  assert.deepEqual(await getSchedulingResource(true, "/api/schedules", { schedules: [] }), { schedules });
 });
 
 test("a denied schedule change preserves the API's upgrade message", async (t) => {

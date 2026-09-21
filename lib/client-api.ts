@@ -16,3 +16,7 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
 export async function getPaidResource<T>(plan: UserPlan, url: string, empty: T): Promise<T> {
   return hasPaidPlan(plan) ? requestJson<T>(url) : empty;
 }
+
+export async function getSchedulingResource<T>(active: boolean, url: string, empty: T): Promise<T> {
+  return active ? requestJson<T>(url) : empty;
+}

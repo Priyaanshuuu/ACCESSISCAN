@@ -2,7 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { hasPaidPlan } from "@/lib/plan-limits";
+import { hasActiveAccess } from "@/lib/billing";
 import { removeScheduledScanJob, syncScheduledScanJob } from "@/lib/schedule-queue";
 
 type Props = { params: Promise<{ scheduleId: string }> };
@@ -59,12 +59,12 @@ function nextRun(frequency: "DAILY" | "WEEKLY") {
 
 async function getPaidDatabaseUser(clerkId: string) {
   const databaseUser = await prisma.user.findUnique({ where: { clerkId } });
-  return databaseUser && hasPaidPlan(databaseUser.plan) ? databaseUser : null;
+  return databaseUser && hasActiveAccess(databaseUser.schedulingAccessUntil) ? databaseUser : null;
 }
 
 function upgradeRequired() {
   return NextResponse.json(
-    { error: "Upgrade to a paid plan to schedule scans." },
+    { error: "Email scheduling requires an active ₹250/month purchase." },
     { status: 403 },
   );
 }

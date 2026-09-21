@@ -9,12 +9,14 @@ test("free users receive the one-page, shallow scan allowance", () => {
 
 test("paid plans are recognized consistently", () => {
   assert.equal(hasPaidPlan("FREE"), false);
+  assert.equal(hasPaidPlan("PAID"), true);
+  assert.deepEqual(planLimits.PAID, { maxDepth: 2, maxPages: 10 });
   assert.equal(hasPaidPlan("INDIE"), true);
   assert.equal(hasPaidPlan("BUSINESS"), true);
   assert.equal(hasPaidPlan("AGENCY"), true);
 });
 
-test("paid plan limits increase with the plan tier", () => {
+test("historical plan limits remain compatible", () => {
   assert.ok(planLimits.INDIE.maxPages < planLimits.BUSINESS.maxPages);
   assert.ok(planLimits.BUSINESS.maxPages < planLimits.AGENCY.maxPages);
 });

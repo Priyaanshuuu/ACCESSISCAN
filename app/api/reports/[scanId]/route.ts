@@ -3,7 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { hasPaidPlan } from "@/lib/plan-limits";
+import { hasScanAccess } from "@/lib/billing";
 
 type Props = { params: Promise<{ scanId: string }> };
 
@@ -17,11 +17,11 @@ export async function GET(request: Request, { params }: Props) {
 
   const { scanId } = await params;
   const scan = await prisma.scan.findUnique({
-    include: { issues: { orderBy: { severity: "asc" } }, user: { select: { plan: true } } },
+    include: { issues: { orderBy: { severity: "asc" } }, user: { select: { plan: true, scansAccessUntil: true } } },
     where: userId ? { id: scanId, user: { clerkId: userId } } : { id: scanId, userId: null },
   });
   if (!scan) return NextResponse.json({ error: "Scan not found." }, { status: 404 });
-  if (userId && (!scan.user || !hasPaidPlan(scan.user.plan))) {
+  if (userId && (!scan.user || !hasScanAccess(scan.user))) {
     return NextResponse.json({ error: "Upgrade to a paid plan to download PDF reports." }, { status: 403 });
   }
   if (scan.status !== "COMPLETED") return NextResponse.json({ error: "Report is available after the scan completes." }, { status: 409 });

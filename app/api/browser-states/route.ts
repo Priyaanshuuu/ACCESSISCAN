@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { encryptBrowserState, validatePlaywrightStorageState } from "@/lib/browser-state-crypto";
-import { hasPaidPlan } from "@/lib/plan-limits";
+import { hasScanAccess } from "@/lib/billing";
 
 export async function GET() {
   const user = await currentUser();
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
 async function getPaidDatabaseUser(clerkId: string) {
   const databaseUser = await prisma.user.findUnique({ where: { clerkId } });
-  return databaseUser && hasPaidPlan(databaseUser.plan) ? databaseUser : null;
+  return databaseUser && hasScanAccess(databaseUser) ? databaseUser : null;
 }
 
 function upgradeRequired() {

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { scanQueue } from "@/lib/queue";
 import { consumeScanRateLimit, releaseScanSlot, reserveScanSlot } from "@/lib/rate-limit";
 import { assertPublicUrl } from "@/lib/url-safety";
+import { hasScanAccess } from "@/lib/billing";
 import { planLimits } from "@/lib/plan-limits";
 
 export async function POST(request: Request) {
@@ -70,7 +71,7 @@ export async function POST(request: Request) {
     freeScanReservedForUserId = null;
     await prisma.user.updateMany({
       data: { freeScanUsed: false },
-      where: { freeScanUsed: true, id: userId, plan: "FREE" },
+      where: { freeScanUsed: true, id: userId },
     });
   }
 
@@ -82,13 +83,15 @@ export async function POST(request: Request) {
           where: { clerkId: user.id },
         })
       : null;
+    const scanAccess = databaseUser ? hasScanAccess(databaseUser) : false;
+    if (browserStateId && !scanAccess) return NextResponse.json({ error: "Scan access requires ₹100/month." }, { status: 403 });
     const browserState = browserStateId && databaseUser
       ? await prisma.browserState.findFirst({ where: { id: browserStateId, userId: databaseUser.id } })
       : null;
     if (browserStateId && !browserState) {
       return NextResponse.json({ error: "Browser session not found." }, { status: 404 });
     }
-    if (browserState?.requiresManualHandoff || browserState?.kind !== "storage_state") {
+    if (browserState && (browserState.requiresManualHandoff || browserState.kind !== "storage_state")) {
       return NextResponse.json(
         { error: "Manual browser handoff is not supported. Upload a Playwright storage-state JSON instead." },
         { status: 409 },
@@ -112,7 +115,7 @@ export async function POST(request: Request) {
     }
     slotReserved = true;
 
-    if (databaseUser?.plan === "FREE") {
+    if (databaseUser && !scanAccess) {
       const freeScanReservation = await prisma.user.updateMany({
         data: { freeScanUsed: true },
         where: { freeScanUsed: false, id: databaseUser.id, plan: "FREE" },
@@ -120,14 +123,14 @@ export async function POST(request: Request) {
       if (!freeScanReservation.count) {
         await releaseReservedSlot();
         return NextResponse.json(
-          { error: "Your free scan has been used. Upgrade to run another scan." },
+          { error: "Your free scan has been used. Unlock scans for ₹100/month to continue." },
           { status: 402 },
         );
       }
       freeScanReservedForUserId = databaseUser.id;
     }
 
-    const limits = planLimits[databaseUser?.plan ?? "FREE"];
+    const limits = planLimits[scanAccess ? databaseUser!.plan : "FREE"];
     if (databaseUser) {
       const period = new Date().toISOString().slice(0, 7);
       await prisma.usagePeriod.upsert({

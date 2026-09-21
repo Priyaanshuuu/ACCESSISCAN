@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
+import { hasScanAccess } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 
 type ScanRouteProps = {
@@ -25,7 +26,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
         orderBy: [{ impact: "desc" }, { rule: "asc" }],
       },
       pages: { orderBy: { depth: "asc" } },
-      user: { select: { plan: true } },
+      user: { select: { plan: true, scansAccessUntil: true } },
     },
     where: userId
       ? { id: scanId, user: { clerkId: userId } }
@@ -48,7 +49,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       pages: scan.pages,
       overallScore: scan.overallScore,
       bestPracticesScore: scan.bestPracticesScore,
-      canDownloadReport: Boolean(scan.user && scan.user.plan !== "FREE"),
+      canDownloadReport: Boolean(scan.user && hasScanAccess(scan.user)),
       lighthouseAudits: scan.lighthouseAudits,
       lighthouseError: scan.lighthouseError,
       aeoSignals: scan.aeoSignals,

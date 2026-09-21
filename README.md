@@ -5,7 +5,7 @@ AccessiScan scans a deployed website and explains accessibility, performance, SE
 ## What works today
 
 - Sign-in and user-owned sites and scans with Clerk.
-- One free scan for each free user. Further scans and paid features require a paid plan.
+- One free scan per account, then scan access for INR 100/month (10 pages per scan, depth 2). Email scheduling is purchased independently for INR 250/month.
 - Playwright browser scans with axe-core accessibility checks, Lighthouse metrics, and custom checks.
 - Scan history, issue review, score history, and scan status updates.
 - Saved browser storage state for sites that need an authenticated session.
@@ -132,3 +132,11 @@ Do not commit secrets, production data, generated `.next` files, or local `.env`
 ## License
 
 MIT © AccessiScan
+
+## Monthly feature access
+
+The checkout offers Scan access (INR 100/month) and Email scheduling (INR 250/month), with no customer-type tiers. Scheduling includes daily/weekly automated scans and email reports; it does not unlock on-demand scans or PDF downloads. Both features together cost INR 350/month.
+
+Each captured Razorpay order grants one calendar month, with manual renewal and no automatic debit. Early renewal extends the current expiry. Expired scan access blocks further scans after the free allowance; expired scheduling pauses background runs until renewed. Duplicate checkout/webhook delivery grants access only once. Configure Razorpay auto-capture and the payment.captured webhook.
+
+Before running this version, apply the additive schema changes using `npm run db:push` and regenerate the client using `npm run db:generate`, then restart the web app and worker. Existing legacy scan purchases retain their access and crawl limits; legacy plan names are retained only for historical data and cannot be purchased. Scheduling requires its separate purchase. No existing records are deleted.
