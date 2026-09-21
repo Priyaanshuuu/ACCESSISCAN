@@ -3,11 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run db:generate",
     "dev": "next dev",
+    "prebuild": "npm run db:generate",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "pretypecheck": "npm run db:generate",
     "typecheck": "tsc --noEmit",
+    "pretest": "npm run db:generate",
     "test": "tsx --test \"tests/**/*.test.ts\"",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -15,6 +19,7 @@
     "redis:up": "docker compose up -d redis",
     "redis:down": "docker compose down",
     "redis:logs": "docker compose logs -f redis",
+    "preworker": "npm run db:generate",
     "worker": "tsx worker/scan-worker.ts"
   },
   "dependencies": {

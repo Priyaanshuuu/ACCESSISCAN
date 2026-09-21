@@ -8,8 +8,8 @@ import { hasScanAccess } from "@/lib/billing";
 export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  const databaseUser = await getPaidDatabaseUser(user.id);
-  if (!databaseUser) return upgradeRequired();
+  const databaseUser = await prisma.user.findUnique({ where: { clerkId: user.id } });
+  if (!databaseUser) return NextResponse.json({ states: [] });
   await prisma.browserState.deleteMany({
     where: { expiresAt: { lt: new Date() }, userId: databaseUser.id },
   });

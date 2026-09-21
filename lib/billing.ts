@@ -1,5 +1,5 @@
 export const products = {
-  SCANS: { amountPaise: 10000, name: "Scan access" },
+  SCANS: { amountPaise: 10000, name: "One scan" },
   SCHEDULING: { amountPaise: 25000, name: "Email scheduling" },
 } as const;
 
@@ -13,9 +13,12 @@ export function hasActiveAccess(until: Date | string | null | undefined, now = n
   return Boolean(until && new Date(until).getTime() > now.getTime());
 }
 
-export function hasScanAccess(user: { plan: string; scansAccessUntil: Date | string | null }, now = new Date()) {
-  // Preserve existing purchases; only the new PAID plan uses monthly expiry.
+export function hasLegacyScanAccess(user: { plan: string; scansAccessUntil: Date | string | null }, now = new Date()) {
   return ["INDIE", "BUSINESS", "AGENCY"].includes(user.plan) || hasActiveAccess(user.scansAccessUntil, now);
+}
+
+export function hasScanAccess(user: { plan: string; scansAccessUntil: Date | string | null; scanCredits: number }, now = new Date()) {
+  return user.scanCredits > 0 || hasLegacyScanAccess(user, now);
 }
 
 export function extendMonth(until: Date | null, now = new Date()) {

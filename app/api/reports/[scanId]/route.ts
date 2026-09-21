@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { readAeoGeoReport } from "@/lib/aeo-geo";
 import { appendAeoGeoPdf } from "@/lib/aeo-geo-pdf";
 import { prisma } from "@/lib/prisma";
-import { hasScanAccess } from "@/lib/billing";
+import { hasLegacyScanAccess } from "@/lib/billing";
 
 type Props = { params: Promise<{ scanId: string }> };
 
@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: Props) {
     where: userId ? { id: scanId, user: { clerkId: userId } } : { id: scanId, userId: null },
   });
   if (!scan) return NextResponse.json({ error: "Scan not found." }, { status: 404 });
-  if (userId && (!scan.user || !hasScanAccess(scan.user))) {
+  if (userId && (!scan.user || (!scan.paidAccess && !hasLegacyScanAccess(scan.user)))) {
     return NextResponse.json({ error: "Upgrade to a paid plan to download PDF reports." }, { status: 403 });
   }
   if (scan.status !== "COMPLETED") return NextResponse.json({ error: "Report is available after the scan completes." }, { status: 409 });

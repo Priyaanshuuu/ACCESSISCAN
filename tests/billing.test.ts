@@ -16,12 +16,13 @@ test("monthly access expires at the boundary and rejects missing dates", () => {
   assert.equal(hasActiveAccess(null, now), false);
   assert.equal(hasActiveAccess("invalid", now), false);
 });
-test("scan access requires its own purchase, even if scheduling is active", () => {
-  const user = { plan: "FREE", scansAccessUntil: null, schedulingAccessUntil: new Date("2026-03-01") };
+test("one scan credit grants scan access, while scheduling alone does not", () => {
+  const user = { plan: "FREE", scansAccessUntil: null, scanCredits: 0, schedulingAccessUntil: new Date("2026-03-01") };
   assert.equal(hasActiveAccess(user.schedulingAccessUntil, now), true);
   assert.equal(hasScanAccess(user, now), false);
-  assert.equal(hasScanAccess({ plan: "PAID", scansAccessUntil: now }, now), false);
-  assert.equal(hasScanAccess({ plan: "PAID", scansAccessUntil: new Date("2026-03-01") }, now), true);
+  assert.equal(hasScanAccess({ ...user, scanCredits: 1 }, now), true);
+  assert.equal(hasScanAccess({ ...user, plan: "PAID", scansAccessUntil: now }, now), false);
+  assert.equal(hasScanAccess({ ...user, plan: "PAID", scansAccessUntil: new Date("2026-03-01") }, now), true);
 });
 test("calendar month renewal clamps month-end and handles leap years", () => {
   assert.equal(extendMonth(null, now).toISOString(), "2026-02-28T12:00:00.000Z");
@@ -33,5 +34,5 @@ test("early renewal preserves remaining time and late renewal starts today", () 
   assert.equal(extendMonth(new Date("2025-12-15"), now).toISOString(), "2026-02-28T12:00:00.000Z");
 });
 test("historical scan purchases keep their existing access", () => {
-  for (const plan of ["INDIE", "BUSINESS", "AGENCY"]) assert.equal(hasScanAccess({ plan, scansAccessUntil: null }, now), true);
+  for (const plan of ["INDIE", "BUSINESS", "AGENCY"]) assert.equal(hasScanAccess({ plan, scansAccessUntil: null, scanCredits: 0 }, now), true);
 });

@@ -67,6 +67,7 @@ model Scan {
   pages       ScanPage[]
   maxPages    Int        @default(1)
   maxDepth    Int        @default(0)
+  paidAccess  Boolean    @default(false)
   browserStateId String?
   browserState   BrowserState? @relation(fields: [browserStateId], references: [id], onDelete: SetNull)
 
@@ -89,6 +90,7 @@ model User {
   usagePeriods UsagePeriod[]
   plan      UserPlan @default(FREE)
   freeScanUsed Boolean @default(false)
+  scanCredits Int @default(0)
   scansAccessUntil DateTime?
   schedulingAccessUntil DateTime?
   payments  Payment[]

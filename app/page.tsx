@@ -153,9 +153,12 @@ export default function Home() {
                 </div>
               )}
               {error ? (
+                <>
                 <Alert className="mt-3 border-[#e7b9b0] bg-[#fff1ee] text-[#8b3023]" id="url-error" variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
+                {error.includes("₹100") && <Link className="mt-3 inline-block text-sm font-semibold text-[#38531f] underline underline-offset-4" href="/dashboard">Buy a scan credit in your dashboard</Link>}
+                </>
               ) : (
                 <p className="mt-3 text-sm text-[#7b887e]" id="url-hint">
                   Start with any public website. Your scan will be saved to your account.

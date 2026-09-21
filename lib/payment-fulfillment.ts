@@ -21,7 +21,7 @@ export async function fulfillPaymentInTransaction(tx: Prisma.TransactionClient, 
     where: { id: user.id },
     data: payment.product === "SCHEDULING"
       ? { schedulingAccessUntil: extendMonth(user.schedulingAccessUntil) }
-      : { plan: "PAID", scansAccessUntil: extendMonth(user.scansAccessUntil), freeScanUsed: true },
+      : { scanCredits: { increment: 1 } },
   });
   return payment;
 }

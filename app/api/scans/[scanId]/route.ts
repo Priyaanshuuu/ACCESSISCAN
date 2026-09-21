@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
-import { hasScanAccess } from "@/lib/billing";
+import { hasLegacyScanAccess } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 
 type ScanRouteProps = {
@@ -49,7 +49,7 @@ export async function GET(_request: Request, { params }: ScanRouteProps) {
       pages: scan.pages,
       overallScore: scan.overallScore,
       bestPracticesScore: scan.bestPracticesScore,
-      canDownloadReport: Boolean(scan.user && hasScanAccess(scan.user)),
+      canDownloadReport: Boolean(scan.user && (scan.paidAccess || hasLegacyScanAccess(scan.user))),
       lighthouseAudits: scan.lighthouseAudits,
       lighthouseError: scan.lighthouseError,
       aeoSignals: scan.aeoSignals,

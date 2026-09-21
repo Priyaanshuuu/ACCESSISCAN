@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-import { hasScanAccess, hasActiveAccess } from "@/lib/billing";
+import { hasScanAccess, hasLegacyScanAccess, hasActiveAccess } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -25,5 +25,5 @@ export async function GET() {
     where: { clerkId: userId },
   });
 
-  return NextResponse.json({ plan: user && hasScanAccess(user) ? "PAID" : "FREE", schedulingActive: hasActiveAccess(user?.schedulingAccessUntil), scansAccessUntil: user?.scansAccessUntil ?? null, schedulingAccessUntil: user?.schedulingAccessUntil ?? null, sites: user?.sites ?? [] });
+  return NextResponse.json({ plan: user && hasScanAccess(user) ? "PAID" : "FREE", legacyScanAccess: Boolean(user && hasLegacyScanAccess(user)), scanCredits: user?.scanCredits ?? 0, schedulingActive: hasActiveAccess(user?.schedulingAccessUntil), scansAccessUntil: user?.scansAccessUntil ?? null, schedulingAccessUntil: user?.schedulingAccessUntil ?? null, sites: user?.sites ?? [] });
 }

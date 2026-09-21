@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { scanQueue } from "@/lib/queue";
 import { consumeScanRateLimit, releaseScanSlot, reserveScanSlot } from "@/lib/rate-limit";
 import { assertPublicUrl } from "@/lib/url-safety";
-import { hasScanAccess } from "@/lib/billing";
+import { hasLegacyScanAccess, hasScanAccess } from "@/lib/billing";
 import { planLimits } from "@/lib/plan-limits";
 
 export async function POST(request: Request) {
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
 
   let slotReserved = false;
   let freeScanReservedForUserId: string | null = null;
+  let creditReservedForUserId: string | null = null;
   async function releaseReservedSlot() {
     if (!slotReserved) return;
     slotReserved = false;
@@ -74,6 +75,12 @@ export async function POST(request: Request) {
       where: { freeScanUsed: true, id: userId },
     });
   }
+  async function releaseCredit() {
+    if (!creditReservedForUserId) return;
+    const userId = creditReservedForUserId;
+    creditReservedForUserId = null;
+    await prisma.user.update({ where: { id: userId }, data: { scanCredits: { increment: 1 } } });
+  }
 
   try {
     const databaseUser = user
@@ -84,7 +91,8 @@ export async function POST(request: Request) {
         })
       : null;
     const scanAccess = databaseUser ? hasScanAccess(databaseUser) : false;
-    if (browserStateId && !scanAccess) return NextResponse.json({ error: "Scan access requires ₹100/month." }, { status: 403 });
+    const legacyAccess = databaseUser ? hasLegacyScanAccess(databaseUser) : false;
+    if (browserStateId && !scanAccess) return NextResponse.json({ error: "An authenticated scan requires a ₹100 scan credit." }, { status: 403 });
     const browserState = browserStateId && databaseUser
       ? await prisma.browserState.findFirst({ where: { id: browserStateId, userId: databaseUser.id } })
       : null;
@@ -115,22 +123,32 @@ export async function POST(request: Request) {
     }
     slotReserved = true;
 
-    if (databaseUser && !scanAccess) {
-      const freeScanReservation = await prisma.user.updateMany({
-        data: { freeScanUsed: true },
-        where: { freeScanUsed: false, id: databaseUser.id, plan: "FREE" },
-      });
-      if (!freeScanReservation.count) {
-        await releaseReservedSlot();
-        return NextResponse.json(
-          { error: "Your free scan has been used. Unlock scans for ₹100/month to continue." },
-          { status: 402 },
-        );
+    if (databaseUser && !legacyAccess) {
+      if (!browserStateId) {
+        const freeScanReservation = await prisma.user.updateMany({
+          data: { freeScanUsed: true },
+          where: { freeScanUsed: false, id: databaseUser.id, plan: "FREE" },
+        });
+        if (freeScanReservation.count) freeScanReservedForUserId = databaseUser.id;
       }
-      freeScanReservedForUserId = databaseUser.id;
+      if (!freeScanReservedForUserId) {
+        const creditReservation = await prisma.user.updateMany({
+          data: { scanCredits: { decrement: 1 } },
+          where: { id: databaseUser.id, scanCredits: { gt: 0 } },
+        });
+        if (!creditReservation.count) {
+          await releaseReservedSlot();
+          return NextResponse.json(
+            { error: "Your free scan has been used. Pay ₹100 for each additional scan." },
+            { status: 402 },
+          );
+        }
+        creditReservedForUserId = databaseUser.id;
+      }
     }
 
-    const limits = planLimits[scanAccess ? databaseUser!.plan : "FREE"];
+    const paidScan = legacyAccess || Boolean(creditReservedForUserId);
+    const limits = planLimits[paidScan ? (legacyAccess ? databaseUser!.plan : "PAID") : "FREE"];
     if (databaseUser) {
       const period = new Date().toISOString().slice(0, 7);
       await prisma.usagePeriod.upsert({
@@ -154,6 +172,7 @@ export async function POST(request: Request) {
         siteId: site?.id,
         maxDepth: limits.maxDepth,
         maxPages: limits.maxPages,
+        paidAccess: paidScan,
         browserStateId: browserState?.id,
       },
     });
@@ -170,6 +189,7 @@ export async function POST(request: Request) {
     } catch {
       await releaseReservedSlot();
       await releaseFreeScan();
+      await releaseCredit();
       await prisma.scan.update({
         data: { status: "FAILED" },
         where: { id: scan.id },
@@ -192,6 +212,7 @@ export async function POST(request: Request) {
   } catch (error) {
     await releaseReservedSlot();
     await releaseFreeScan();
+    await releaseCredit();
     console.error("[api/scans] failed to create scan", {
       code: error instanceof Error && "code" in error ? error.code : undefined,
       message: error instanceof Error ? error.message : "Unknown database error",

@@ -5,7 +5,7 @@ AccessiScan scans a deployed website and explains accessibility, performance, SE
 ## What works today
 
 - Sign-in and user-owned sites and scans with Clerk.
-- One free scan per account, then scan access for INR 100/month (10 pages per scan, depth 2). Email scheduling is purchased independently for INR 250/month.
+- One free scan per account, then INR 100 for each additional on-demand scan (10 pages, depth 2). Email scheduling remains INR 250/month.
 - Playwright browser scans with axe-core accessibility checks, Lighthouse metrics, and custom checks.
 - Scan history, issue review, score history, and scan status updates.
 - AEO/GEO structural analysis across crawled pages, duplicate metadata detection, and optional OpenAI content recommendations with page evidence. See [AI setup](./docs/07-configuration.md#aeogeo-analysis).
@@ -89,7 +89,7 @@ Open http://localhost:3000, sign in, and start a scan. The worker must be runnin
 
 ## Plans and access
 
-Free users can use one scan. Paid plans can run additional scans and use paid features such as scheduling, browser states, and PDF reports. The scan route reserves the free entitlement atomically, so two simultaneous requests cannot spend the same free scan twice. A failed request releases the reservation.
+Each account gets one free scan. Each INR 100 scan purchase adds one credit, consumed when an additional on-demand scan is queued. Paid scans include their PDF report and can use a saved browser state. Email scheduling is purchased separately. The scan route reserves free scans and credits atomically; a queue failure restores the reservation.
 
 The exact limits are defined in [lib/plan-limits.ts](./lib/plan-limits.ts). Keep dashboard copy and plan configuration in sync when changing limits.
 
@@ -134,10 +134,10 @@ Do not commit secrets, production data, generated `.next` files, or local `.env`
 
 MIT © AccessiScan
 
-## Monthly feature access
+## Paid features
 
-The checkout offers Scan access (INR 100/month) and Email scheduling (INR 250/month), with no customer-type tiers. Scheduling includes daily/weekly automated scans and email reports; it does not unlock on-demand scans or PDF downloads. Both features together cost INR 350/month.
+The checkout offers one additional on-demand scan for INR 100 and email scheduling for INR 250/month. Scheduling includes daily/weekly automated scans and email reports; it does not unlock additional on-demand scans or their PDF downloads.
 
-Each captured Razorpay order grants one calendar month, with manual renewal and no automatic debit. Early renewal extends the current expiry. Expired scan access blocks further scans after the free allowance; expired scheduling pauses background runs until renewed. Duplicate checkout/webhook delivery grants access only once. Configure Razorpay auto-capture and the payment.captured webhook.
+Each captured scan order grants one non-expiring scan credit. Each captured scheduling order grants one calendar month, with manual renewal and no automatic debit; early renewal extends its current expiry. Duplicate checkout/webhook delivery grants the entitlement only once. Configure Razorpay auto-capture and the payment.captured webhook.
 
-Before running this version, apply the additive schema changes using `npm run db:push` and regenerate the client using `npm run db:generate`, then restart the web app and worker. Existing legacy scan purchases retain their access and crawl limits; legacy plan names are retained only for historical data and cannot be purchased. Scheduling requires its separate purchase. No existing records are deleted.
+Before running this version, apply the additive schema changes using `npm run db:push` against a reviewed database, then restart the web app and worker. The dev, build, worker, typecheck, and test scripts regenerate the Prisma client automatically so its types match `schema.prisma`. If an editor still shows stale Prisma types, restart its TypeScript server. Existing monthly and legacy scan purchases retain their access until expiry and their crawl limits; new scan purchases grant credits instead. Scheduling requires its separate purchase. No existing records are deleted.
