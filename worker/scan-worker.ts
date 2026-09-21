@@ -2,10 +2,6 @@ import "dotenv/config";
 
 import { randomUUID } from "node:crypto";
 import crypto from "node:crypto";
-import { execFile } from "node:child_process";
-import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http";
-import { connect as netConnect } from "node:net";
-import { promisify } from "node:util";
 import type { AxeResults } from "axe-core";
 import { Worker } from "bullmq";
 import { chromium } from "playwright";
@@ -21,17 +17,14 @@ import { releaseScanSlot } from "@/lib/rate-limit";
 import { hasActiveAccess } from "@/lib/billing";
 import { planLimits } from "@/lib/plan-limits";
 import { scheduleJobId, scheduleQueue, type ScheduledScanJob } from "@/lib/schedule-queue";
-import { assertPublicUrl, resolvePublicHostname } from "@/lib/url-safety";
+import { isTerminalJobFailure, reconcileInterruptedScans } from "@/lib/scan-job-lifecycle";
+import { runLighthouse, type LighthouseResult } from "@/lib/lighthouse";
+import { assertPublicUrl } from "@/lib/url-safety";
 
 type AxeWindow = Window & {
   axe: {
     run: () => Promise<AxeResults>;
   };
-};
-
-type LighthouseResult = {
-  categories?: Record<string, { score: number | null }>;
-  audits?: Record<string, { score: number | null; numericValue?: number; displayValue?: string }>;
 };
 
 const fixTemplates: Record<string, { fix: string; recommendation: string }> = {
@@ -63,8 +56,6 @@ const fixTemplates: Record<string, { fix: string; recommendation: string }> = {
 
 const highConfidenceRules = new Set(["button-name", "document-title", "html-has-lang", "image-alt", "label"]);
 
-const execFileAsync = promisify(execFile);
-
 const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
 const parsedRedisUrl = new URL(redisUrl);
 
@@ -87,7 +78,7 @@ const worker = new Worker<ScanJob>(
     }
 
     await prisma.scan.update({
-      data: { status: "RUNNING" },
+      data: { status: "RUNNING", failureReason: null },
       where: { id: scan.id },
     });
 
@@ -344,14 +335,14 @@ const worker = new Worker<ScanJob>(
   {
     connection: workerConnection,
     concurrency: 1,
-    lockDuration: 300_000,
+    lockDuration: 60_000,
   },
 );
 
 worker.on("completed", (job) => {
   console.log(`[scan-worker] completed job ${job.id}`);
-  void releaseScanSlot(job.data.identity);
-  void sendCompletionEmail(job.data.scanId);
+  void releaseScanSlot(job.data.identity).catch((error) => console.error("[scan-worker] slot release failed", error));
+  void sendCompletionEmail(job.data.scanId).catch((error) => console.error("[scan-worker] completion email failed", error));
 });
 
 const scheduledWorker = new Worker<ScheduledScanJob>(
@@ -429,29 +420,57 @@ function pickAudit(
   );
 }
 
-worker.on("failed", async (job, error) => {
-  if (!job) {
-    console.error("[scan-worker] job failed before it was available", error);
-    return;
-  }
+worker.on("error", (error) => console.error("[scan-worker] queue error", error));
+scheduledWorker.on("error", (error) => console.error("[scheduled-worker] queue error", error));
+worker.on("stalled", (jobId) => console.warn(`[scan-worker] recovering stalled job ${jobId}`));
 
-  console.error(`[scan-worker] failed job ${job.id}: ${error.message}`);
-
-  await prisma.scan.updateMany({
-    data: {
-      failureReason: error.message.slice(0, 1000),
-      status: "FAILED",
-    },
-    where: { id: job.data.scanId },
-  });
-
-  if (job) {
-    await releaseScanSlot(job.data.identity);
-  }
+worker.on("failed", (job, error) => {
+  if (!job) { console.error("[scan-worker] job failed before it was available", error); return; }
+  void (async () => {
+    console.error(`[scan-worker] failed attempt for job ${job.id}: ${error.message}`);
+    if (!isTerminalJobFailure(await job.getState())) return;
+    const result = await prisma.scan.updateMany({
+      data: { failureReason: error.message.slice(0, 1000), status: "FAILED" },
+      where: { id: job.data.scanId, status: { in: ["RUNNING", "QUEUED"] } },
+    });
+    if (result.count) await releaseScanSlot(job.data.identity);
+  })().catch((failure) => console.error("[scan-worker] could not record job failure", failure));
 });
+
+let reconciling = false;
+async function reconcileStaleScans() {
+  if (reconciling) return;
+  reconciling = true;
+  try {
+    await reconcileInterruptedScans({
+      listStaleScans: async () => {
+        if (await scanQueue.isPaused()) return [];
+        const scans = await prisma.scan.findMany({
+          where: { status: { in: ["RUNNING", "QUEUED"] }, updatedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } },
+          select: { id: true, status: true, updatedAt: true },
+        });
+        return scans.map((scan) => ({ ...scan, status: scan.status as "RUNNING" | "QUEUED" }));
+      },
+      listJobs: async () => (await scanQueue.getJobs(["active", "waiting", "delayed", "prioritized", "waiting-children", "completed", "failed"])).filter(Boolean),
+      markFailed: async (scan, failureReason) => {
+        if (await scanQueue.isPaused()) return false;
+        return Boolean((await prisma.scan.updateMany({
+          data: { failureReason, status: "FAILED" },
+          where: { id: scan.id, status: scan.status, updatedAt: scan.updatedAt },
+        })).count);
+      },
+      releaseSlot: releaseScanSlot,
+    });
+  } catch (error) { console.error("[scan-worker] failed to reconcile interrupted scans", error); }
+  finally { reconciling = false; }
+}
+const reconciliationTimer = setInterval(() => void reconcileStaleScans(), 60_000);
+reconciliationTimer.unref();
+void reconcileStaleScans();
 
 async function shutdown(signal: string) {
   console.log(`[scan-worker] received ${signal}, shutting down`);
+  clearInterval(reconciliationTimer);
   await worker.close();
   await scheduledWorker.close();
   await prisma.$disconnect();
@@ -462,127 +481,6 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 console.log("[scan-worker] listening on the scan queue");
-
-void prisma.scan.updateMany({
-  data: {
-    failureReason: "Worker timeout or restart interrupted this scan.",
-    status: "FAILED",
-  },
-  where: {
-    status: "RUNNING",
-    updatedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) },
-  },
-}).catch((error) => {
-  console.error("[scan-worker] failed to reconcile stale scans", error);
-});
-
-async function runLighthouse(url: string) {
-  const lighthouseCli = require.resolve("lighthouse/cli/index.js");
-  await assertPublicUrl(url);
-  const proxy = await createLighthouseProxy();
-
-  try {
-    const { stdout } = await execFileAsync(
-      process.execPath,
-      [
-        lighthouseCli,
-        url,
-        "--output=json",
-        "--output-path=stdout",
-        "--only-categories=performance,seo,best-practices",
-        `--chrome-flags=--headless --disable-dev-shm-usage --proxy-server=http://127.0.0.1:${proxy.port} --proxy-bypass-list=<-loopback>`,
-        "--quiet",
-      ],
-      { maxBuffer: 25 * 1024 * 1024 },
-    );
-
-    return JSON.parse(stdout) as LighthouseResult;
-  } finally {
-    await closeLighthouseProxy(proxy.server);
-  }
-}
-
-async function createLighthouseProxy() {
-  const server = createServer((request, response) => {
-    void proxyHttpRequest(request, response);
-  });
-  server.on("connect", (request, clientSocket, head) => {
-    void proxyHttpsRequest(request, clientSocket, head);
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => resolve());
-  });
-
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    await closeLighthouseProxy(server);
-    throw new Error("Lighthouse proxy did not expose a TCP port.");
-  }
-
-  return { port: address.port, server };
-}
-
-async function proxyHttpRequest(request: IncomingMessage, response: ServerResponse) {
-  try {
-    const target = new URL(request.url || "", `http://${request.headers.host || ""}`);
-    if (target.protocol !== "http:") throw new Error("Only HTTP proxy requests are supported.");
-    const address = (await resolvePublicHostname(target.hostname))[0];
-    const upstream = httpRequest(
-      {
-        headers: { ...request.headers, connection: "close", host: target.host },
-        hostname: address,
-        method: request.method,
-        path: `${target.pathname}${target.search}`,
-        port: Number(target.port || 80),
-      },
-      (upstreamResponse) => {
-        response.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
-        upstreamResponse.pipe(response);
-      },
-    );
-    upstream.on("error", () => {
-      if (!response.headersSent) response.writeHead(502);
-      response.end();
-    });
-    request.pipe(upstream);
-  } catch {
-    response.writeHead(403);
-    response.end("Blocked destination");
-  }
-}
-
-async function proxyHttpsRequest(
-  request: IncomingMessage,
-  clientSocket: import("node:stream").Duplex,
-  head: Buffer,
-) {
-  try {
-    const target = new URL(`http://${request.url}`);
-    const address = (await resolvePublicHostname(target.hostname))[0];
-    const upstream = netConnect({
-      host: address,
-      port: Number(target.port || 443),
-    });
-    upstream.once("connect", () => {
-      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-      if (head.length) upstream.write(head);
-      clientSocket.pipe(upstream);
-      upstream.pipe(clientSocket);
-    });
-    upstream.once("error", () => clientSocket.destroy());
-  } catch {
-    clientSocket.destroy();
-  }
-}
-
-async function closeLighthouseProxy(server: import("node:http").Server) {
-  if (!server.listening) return;
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
-}
 
 function normalizeSeverity(impact: string | null | undefined) {
   if (impact === "critical" || impact === "serious") return "critical";
